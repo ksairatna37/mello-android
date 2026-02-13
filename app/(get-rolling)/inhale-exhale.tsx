@@ -36,16 +36,16 @@ import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, F
 const VibrationIcon = ({ active = false }: { active?: boolean }) => {
   const color = active ? '#50B8B8' : 'rgba(255,255,255,0.6)';
   return (
-    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+    <Svg width={28} height={28} viewBox="-3 0 30 24" fill="none">
       {/* Left waves */}
       <Path
-        d="M4 15C2.5 13.5 2.5 10.5 4 9"
+        d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
         stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
       />
       <Path
-        d="M1 17C-1.5 14 -1.5 10 1 7"
+        d="M2 16.5C-0.2 13.8 -0.2 10.2 2 7.5"
         stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
@@ -53,26 +53,26 @@ const VibrationIcon = ({ active = false }: { active?: boolean }) => {
       />
       {/* Phone body */}
       <Rect
-        x={7}
-        y={4}
-        width={10}
-        height={16}
+        x={8}
+        y={5}
+        width={8}
+        height={14}
         rx={2}
         stroke={color}
         strokeWidth={1.5}
         fill="none"
       />
       {/* Screen line */}
-      <Line x1={9} y1={7} x2={15} y2={7} stroke={color} strokeWidth={1} opacity={0.5} />
+      <Line x1={10} y1={7.5} x2={14} y2={7.5} stroke={color} strokeWidth={1} opacity={0.5} />
       {/* Right waves */}
       <Path
-        d="M20 15C21.5 13.5 21.5 10.5 20 9"
+        d="M19 14.5C20.2 13.2 20.2 10.8 19 9.5"
         stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
       />
       <Path
-        d="M23 17C25.5 14 25.5 10 23 7"
+        d="M22 16.5C24.2 13.8 24.2 10.2 22 7.5"
         stroke={color}
         strokeWidth={1.5}
         strokeLinecap="round"
