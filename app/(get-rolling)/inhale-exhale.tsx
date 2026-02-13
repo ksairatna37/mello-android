@@ -215,21 +215,21 @@ export default function InhaleExhaleScreen() {
   // Button entrance animations (after title animation completes)
   useEffect(() => {
     // Title animation takes ~3 seconds (8 words * ~350ms each)
-    // After title completes + 1 second delay, animate start button
+    // After title completes + 1.5 second delay, animate start button
     const startButtonTimer = setTimeout(() => {
-      startButtonOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
-      startButtonTranslateY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.2)) });
-    }, 3500);
+      startButtonOpacity.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
+      startButtonTranslateY.value = withTiming(0, { duration: 1000, easing: Easing.out(Easing.cubic) });
+    }, 4500);
 
-    // After start button + 1 second, animate side buttons
+    // After start button + 2 seconds, animate side buttons
     const sideButtonsTimer = setTimeout(() => {
       // Vibration button slides in from left
-      leftButtonOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
-      leftButtonTranslateX.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) });
+      leftButtonOpacity.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.ease) });
+      leftButtonTranslateX.value = withTiming(0, { duration: 900, easing: Easing.out(Easing.ease) });
       // Filter button slides in from right
-      rightButtonOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
-      rightButtonTranslateX.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) });
-    }, 4500);
+      rightButtonOpacity.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.ease) });
+      rightButtonTranslateX.value = withTiming(0, { duration: 900, easing: Easing.out(Easing.ease) });
+    }, 6500);
 
     return () => {
       clearTimeout(startButtonTimer);
