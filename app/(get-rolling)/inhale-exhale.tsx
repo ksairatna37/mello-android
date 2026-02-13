@@ -32,25 +32,29 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, FeGaussianBlur } from 'react-native-svg';
 
-// Custom Vibration Icon (phone with waves)
+// Custom Vibration Icon (phone with waves when active, just phone when off)
 const VibrationIcon = ({ active = false }: { active?: boolean }) => {
   const color = active ? '#50B8B8' : 'rgb(255, 255, 255)';
   return (
     <Svg width={42} height={42} viewBox="-3 0 30 24" fill="none">
-      {/* Left waves */}
-      <Path
-        d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M2 16.5C-0.2 13.8 -0.2 10.2 2 7.5"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        opacity={0.6}
-      />
+      {/* Left waves - only show when active */}
+      {active && (
+        <>
+          <Path
+            d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
+          <Path
+            d="M2 16.5C-0.2 13.8 -0.2 10.2 2 7.5"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            opacity={0.6}
+          />
+        </>
+      )}
       {/* Phone body */}
       <Rect
         x={8}
@@ -64,20 +68,24 @@ const VibrationIcon = ({ active = false }: { active?: boolean }) => {
       />
       {/* Screen line */}
       <Line x1={10} y1={7.5} x2={14} y2={7.5} stroke={color} strokeWidth={1} opacity={0.5} />
-      {/* Right waves */}
-      <Path
-        d="M19 14.5C20.2 13.2 20.2 10.8 19 9.5"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M22 16.5C24.2 13.8 24.2 10.2 22 7.5"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        opacity={0.6}
-      />
+      {/* Right waves - only show when active */}
+      {active && (
+        <>
+          <Path
+            d="M19 14.5C20.2 13.2 20.2 10.8 19 9.5"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
+          <Path
+            d="M22 16.5C24.2 13.8 24.2 10.2 22 7.5"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            opacity={0.6}
+          />
+        </>
+      )}
     </Svg>
   );
 };
