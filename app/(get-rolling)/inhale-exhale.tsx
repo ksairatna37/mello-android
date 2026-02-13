@@ -468,15 +468,16 @@ export default function InhaleExhaleScreen() {
                 <View style={styles.startButtonWrapper}>
                   <Svg width={160} height={160} style={styles.startButtonGlow}>
                     <Defs>
-                      <Filter id="blurFilter" x="-50%" y="-50%" width="200%" height="200%">
-                        <FeGaussianBlur in="SourceGraphic" stdDeviation="8" />
+                      <Filter id="blurFilter" x="-100%" y="-100%" width="300%" height="300%">
+                        <FeGaussianBlur in="SourceGraphic" stdDeviation="18" />
                       </Filter>
                       <RadialGradient id="startGlow" cx="50%" cy="50%" r="50%">
-                        <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.7" />
-                        <Stop offset="100%" stopColor="#80D0D8" stopOpacity="0.3" />
+                        <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.8" />
+                        <Stop offset="70%" stopColor="#80D0D8" stopOpacity="0.5" />
+                        <Stop offset="100%" stopColor="#80D0D8" stopOpacity="0" />
                       </RadialGradient>
                     </Defs>
-                    <Circle cx="80" cy="80" r="65" fill="url(#startGlow)" filter="url(#blurFilter)" />
+                    <Circle cx="80" cy="80" r="70" fill="url(#startGlow)" filter="url(#blurFilter)" />
                   </Svg>
                   <TouchableOpacity style={styles.startButton} onPress={handleStart}>
                     <Text style={styles.startButtonText}>Start</Text>
