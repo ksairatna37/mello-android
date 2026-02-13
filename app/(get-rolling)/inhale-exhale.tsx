@@ -219,7 +219,7 @@ export default function InhaleExhaleScreen() {
     const startButtonTimer = setTimeout(() => {
       startButtonOpacity.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
       startButtonTranslateY.value = withTiming(0, { duration: 1000, easing: Easing.out(Easing.cubic) });
-    }, 4500);
+    }, 1500);
 
     // After start button + 2 seconds, animate side buttons
     const sideButtonsTimer = setTimeout(() => {
@@ -229,7 +229,7 @@ export default function InhaleExhaleScreen() {
       // Filter button slides in from right
       rightButtonOpacity.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.ease) });
       rightButtonTranslateX.value = withTiming(0, { duration: 900, easing: Easing.out(Easing.ease) });
-    }, 6500);
+    }, 2500);
 
     return () => {
       clearTimeout(startButtonTimer);
@@ -465,9 +465,12 @@ export default function InhaleExhaleScreen() {
               </Animated.View>
 
               <Animated.View style={startButtonAnimatedStyle}>
-                <TouchableOpacity style={styles.startButton} onPress={handleStart}>
-                  <Text style={styles.startButtonText}>Start</Text>
-                </TouchableOpacity>
+                <View style={styles.startButtonWrapper}>
+                  <View style={styles.startButtonGlow} />
+                  <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+                    <Text style={styles.startButtonText}>Start</Text>
+                  </TouchableOpacity>
+                </View>
               </Animated.View>
 
               <Animated.View style={rightButtonAnimatedStyle}>
@@ -669,6 +672,19 @@ const styles = StyleSheet.create({
   controlButtonActive: {
     backgroundColor: 'rgba(80,184,184,0.2)',
   },
+  startButtonWrapper: {
+    width: 140,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startButtonGlow: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
   startButton: {
     width: 100,
     height: 100,
@@ -676,11 +692,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 25,
-    elevation: 10,
   },
   startButtonText: {
     fontSize: 20,
