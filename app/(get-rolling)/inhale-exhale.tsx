@@ -30,7 +30,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, FeGaussianBlur } from 'react-native-svg';
 
 // Custom Vibration Icon (phone with waves)
 const VibrationIcon = ({ active = false }: { active?: boolean }) => {
@@ -466,14 +466,17 @@ export default function InhaleExhaleScreen() {
 
               <Animated.View style={startButtonAnimatedStyle}>
                 <View style={styles.startButtonWrapper}>
-                  <Svg width={140} height={140} style={styles.startButtonGlow}>
+                  <Svg width={160} height={160} style={styles.startButtonGlow}>
                     <Defs>
+                      <Filter id="blurFilter" x="-50%" y="-50%" width="200%" height="200%">
+                        <FeGaussianBlur in="SourceGraphic" stdDeviation="8" />
+                      </Filter>
                       <RadialGradient id="startGlow" cx="50%" cy="50%" r="50%">
-                        <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
-                        <Stop offset="100%" stopColor="#80D0D8" stopOpacity="0.4" />
+                        <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.7" />
+                        <Stop offset="100%" stopColor="#80D0D8" stopOpacity="0.3" />
                       </RadialGradient>
                     </Defs>
-                    <Circle cx="70" cy="70" r="70" fill="url(#startGlow)" />
+                    <Circle cx="80" cy="80" r="65" fill="url(#startGlow)" filter="url(#blurFilter)" />
                   </Svg>
                   <TouchableOpacity style={styles.startButton} onPress={handleStart}>
                     <Text style={styles.startButtonText}>Start</Text>
@@ -667,7 +670,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 40,
+    gap: 25,
   },
   controlButton: {
     width: 56,
@@ -690,9 +693,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   startButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 100,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
