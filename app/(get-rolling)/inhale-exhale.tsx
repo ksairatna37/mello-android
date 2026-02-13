@@ -36,7 +36,7 @@ import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, F
 const VibrationIcon = ({ active = false }: { active?: boolean }) => {
   const color = active ? '#50B8B8' : 'rgba(255,255,255,0.6)';
   return (
-    <Svg width={28} height={28} viewBox="-3 0 30 24" fill="none">
+    <Svg width={36} height={36} viewBox="-3 0 30 24" fill="none">
       {/* Left waves */}
       <Path
         d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
@@ -86,7 +86,7 @@ const VibrationIcon = ({ active = false }: { active?: boolean }) => {
 const FilterIcon = () => {
   const color = 'rgba(255,255,255,0.6)';
   return (
-    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+    <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
       {/* Top line */}
       <Line x1={4} y1={8} x2={20} y2={8} stroke={color} strokeWidth={2} strokeLinecap="round" />
       {/* Top slider dot */}
