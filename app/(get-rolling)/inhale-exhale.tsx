@@ -30,7 +30,74 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, RadialGradient, Stop, Circle, Path } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line } from 'react-native-svg';
+
+// Custom Vibration Icon (phone with waves)
+const VibrationIcon = ({ active = false }: { active?: boolean }) => {
+  const color = active ? '#50B8B8' : 'rgba(255,255,255,0.6)';
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+      {/* Left waves */}
+      <Path
+        d="M4 15C2.5 13.5 2.5 10.5 4 9"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M1 17C-1.5 14 -1.5 10 1 7"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        opacity={0.6}
+      />
+      {/* Phone body */}
+      <Rect
+        x={7}
+        y={4}
+        width={10}
+        height={16}
+        rx={2}
+        stroke={color}
+        strokeWidth={1.5}
+        fill="none"
+      />
+      {/* Screen line */}
+      <Line x1={9} y1={7} x2={15} y2={7} stroke={color} strokeWidth={1} opacity={0.5} />
+      {/* Right waves */}
+      <Path
+        d="M20 15C21.5 13.5 21.5 10.5 20 9"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M23 17C25.5 14 25.5 10 23 7"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        opacity={0.6}
+      />
+    </Svg>
+  );
+};
+
+// Custom Filter/Equalizer Icon (two horizontal sliders)
+const FilterIcon = () => {
+  const color = 'rgba(255,255,255,0.6)';
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+      {/* Top line */}
+      <Line x1={4} y1={8} x2={20} y2={8} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      {/* Top slider dot */}
+      <Circle cx={14} cy={8} r={3} fill={color} />
+      {/* Bottom line */}
+      <Line x1={4} y1={16} x2={20} y2={16} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      {/* Bottom slider dot */}
+      <Circle cx={10} cy={16} r={3} fill={color} />
+    </Svg>
+  );
+};
 
 import AuroraGradient from '@/components/common/AuroraGradient';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
@@ -343,11 +410,7 @@ export default function InhaleExhaleScreen() {
                 style={[styles.controlButton, vibrationEnabled && styles.controlButtonActive]}
                 onPress={() => setVibrationEnabled(!vibrationEnabled)}
               >
-                <Ionicons
-                  name={vibrationEnabled ? 'phone-portrait' : 'phone-portrait-outline'}
-                  size={24}
-                  color={vibrationEnabled ? '#50B8B8' : 'rgba(255,255,255,0.6)'}
-                />
+                <VibrationIcon active={vibrationEnabled} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.startButton} onPress={handleStart}>
@@ -355,7 +418,7 @@ export default function InhaleExhaleScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.controlButton} onPress={openCustomization}>
-                <Ionicons name="options-outline" size={24} color="rgba(255,255,255,0.6)" />
+                <FilterIcon />
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -457,14 +520,14 @@ export default function InhaleExhaleScreen() {
                 style={[styles.toggleOption, vibrationEnabled && styles.toggleOptionActive]}
                 onPress={() => setVibrationEnabled(true)}
               >
-                <Ionicons name="phone-portrait" size={20} color={vibrationEnabled ? '#50B8B8' : 'rgba(255,255,255,0.5)'} />
+                <VibrationIcon active={vibrationEnabled} />
                 <Text style={[styles.toggleText, vibrationEnabled && styles.toggleTextActive]}>On</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleOption, !vibrationEnabled && styles.toggleOptionActive]}
                 onPress={() => setVibrationEnabled(false)}
               >
-                <Ionicons name="phone-portrait-outline" size={20} color={!vibrationEnabled ? '#50B8B8' : 'rgba(255,255,255,0.5)'} />
+                <VibrationIcon active={!vibrationEnabled} />
                 <Text style={[styles.toggleText, !vibrationEnabled && styles.toggleTextActive]}>Off</Text>
               </TouchableOpacity>
             </View>
