@@ -34,9 +34,9 @@ import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, F
 
 // Custom Vibration Icon (phone with waves)
 const VibrationIcon = ({ active = false }: { active?: boolean }) => {
-  const color = active ? '#50B8B8' : 'rgba(255,255,255,0.6)';
+  const color = active ? '#50B8B8' : 'rgb(255, 255, 255)';
   return (
-    <Svg width={36} height={36} viewBox="-3 0 30 24" fill="none">
+    <Svg width={42} height={42} viewBox="-3 0 30 24" fill="none">
       {/* Left waves */}
       <Path
         d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
@@ -84,7 +84,7 @@ const VibrationIcon = ({ active = false }: { active?: boolean }) => {
 
 // Custom Filter/Equalizer Icon (two horizontal sliders)
 const FilterIcon = () => {
-  const color = 'rgba(255,255,255,0.6)';
+  const color = 'rgb(255, 255, 255)';
   return (
     <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
       {/* Top line */}
@@ -193,6 +193,10 @@ export default function InhaleExhaleScreen() {
   const leftButtonOpacity = useSharedValue(0);
   const rightButtonTranslateX = useSharedValue(60);
   const rightButtonOpacity = useSharedValue(0);
+
+  // Bottom sheet animations
+  const sheetTranslateY = useSharedValue(400);
+  const overlayOpacity = useSharedValue(0);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -400,15 +404,32 @@ export default function InhaleExhaleScreen() {
     transform: [{ translateX: rightButtonTranslateX.value }],
   }));
 
+  // Bottom sheet animated styles
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
+
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+
   // Customization bottom sheet handlers
   const openCustomization = () => {
     setTempCycles(totalCycles);
     setShowCustomization(true);
+    overlayOpacity.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.ease) });
+    sheetTranslateY.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) });
+  };
+
+  const closeCustomization = () => {
+    overlayOpacity.value = withTiming(0, { duration: 250, easing: Easing.in(Easing.ease) });
+    sheetTranslateY.value = withTiming(400, { duration: 300, easing: Easing.in(Easing.cubic) });
+    setTimeout(() => setShowCustomization(false), 300);
   };
 
   const saveCustomization = () => {
     setTotalCycles(tempCycles);
-    setShowCustomization(false);
+    closeCustomization();
   };
 
   return (
@@ -574,12 +595,13 @@ export default function InhaleExhaleScreen() {
 
       {/* Customization Bottom Sheet */}
       {showCustomization && (
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={() => setShowCustomization(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={[styles.bottomSheet, { paddingBottom: insets.bottom + 20 }]}>
+        <Animated.View style={[styles.overlay, overlayAnimatedStyle]}>
+          <TouchableOpacity
+            style={styles.overlayTouchable}
+            activeOpacity={1}
+            onPress={closeCustomization}
+          />
+          <Animated.View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 20 }, sheetAnimatedStyle]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Customization</Text>
 
@@ -621,8 +643,8 @@ export default function InhaleExhaleScreen() {
             <TouchableOpacity style={styles.saveButton} onPress={saveCustomization}>
               <Text style={styles.saveButtonText}>Save</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
       )}
     </View>
   );
@@ -680,6 +702,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: '#3a4d51',
   },
   controlButtonActive: {
     backgroundColor: 'rgba(80,184,184,0.2)',
@@ -867,10 +891,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
+  overlayTouchable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   bottomSheet: {
     backgroundColor: 'rgba(30,50,50,0.95)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     padding: 24,
   },
   sheetHandle: {
