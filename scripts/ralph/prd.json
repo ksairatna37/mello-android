@@ -1,0 +1,193 @@
+{
+  "feature": "Inhale-Exhale Breathing Exercise Screen",
+  "description": "A guided breathing exercise screen (step 7 of 8) in the Get Rolling onboarding flow. Features animated breathing circle, customizable cycles, haptic feedback, and poetic supportive messages.",
+  "reference_images": "C:\\Users\\hp\\Downloads\\inhale-exhale\\",
+  "created": "2026-02-13",
+
+  "requirements_summary": {
+    "breathing_pattern": "4-2-6 (4s inhale, 2s hold, 6s exhale)",
+    "default_cycles": 3,
+    "cycle_range": "1-5 (customizable via bottom sheet)",
+    "circle_animation": "Expand on inhale, stay expanded on hold, contract on exhale + wavy inner glow around circumference",
+    "poetic_subtitles": "Different messages each cycle for each phase (inhale/hold/exhale)",
+    "haptics": "Pulse on phase transitions, toggleable via bottom sheet",
+    "customization_sheet": "Bottom sheet with vibration toggle (On/Off) + cycle slider (1-5) + Save button",
+    "aurora_theme": "New soft teal/cyan calming aurora",
+    "completion_screen": "Poetic message + breathing fact + stats (cycles, duration) + next button",
+    "navigation": "discomfort.tsx -> inhale-exhale.tsx -> insight.tsx",
+    "file_name": "inhale-exhale.tsx",
+    "step_number": "7 of 8"
+  },
+
+  "stories": [
+    {
+      "id": 1,
+      "title": "Create base inhale-exhale.tsx with aurora background and header",
+      "description": "Create the base screen file with soft teal/cyan aurora gradient, header with close button, progress bar (step 7 of 8), and step indicator. Reference step1.jpg for layout.",
+      "acceptance_criteria": [
+        "File created at app/(get-rolling)/inhale-exhale.tsx",
+        "Soft teal/cyan aurora gradient background (new calming theme)",
+        "Header with close button (X icon), progress bar, '7 of 8' text",
+        "Progress bar shows 7/8 filled with teal accent color",
+        "Safe area insets applied correctly"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "title": "Implement intro state with title and Start button",
+      "description": "Show intro screen with subtitle, poetic title, and bottom controls (haptic toggle, Start button, settings icon). Reference step1.jpg and customisation-bottle-slideup sheet.jpg.",
+      "acceptance_criteria": [
+        "Subtitle: 'I am personalising the experience for you! Hold a moment'",
+        "Title: 'You're doing beautifully. Let's take a breath together.' with AnimatedText",
+        "Bottom section with 3 controls: haptic icon (left), glowing Start button (center), settings icon (right)",
+        "Start button has white glow effect",
+        "Haptic and settings icons are circular dark buttons"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "title": "Implement customization bottom sheet",
+      "description": "Create slide-up bottom sheet with vibration toggle and breathing cycle slider. Reference customisation-bottle-slideup sheet.jpg.",
+      "acceptance_criteria": [
+        "Bottom sheet slides up when settings icon tapped",
+        "Drag handle at top",
+        "Title: 'Customization'",
+        "Vibration section with On/Off segmented toggle (On selected by default)",
+        "Breathing cycle section with slider (1-5 range, default 3)",
+        "Slider shows current value with tick marks",
+        "Save button at bottom (white, full width)",
+        "Sheet dismisses on Save or drag down"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "title": "Implement countdown sequence (3-2-1)",
+      "description": "After Start pressed, show countdown with breathing circle and instructions. Reference step2.jpg, step3.jpg, step4.jpg.",
+      "acceptance_criteria": [
+        "Circle appears in center with number '3', text: 'inhale through the nose'",
+        "After 1s, circle shows '2', text: 'hold the breath'",
+        "After 1s, circle shows '1', text: 'then exhale through the mouth'",
+        "Circle has soft glow/aura effect",
+        "Smooth fade transitions between countdown states",
+        "Text appears below the circle, centered"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "title": "Create animated breathing circle component",
+      "description": "Build reusable BreathingCircle component with expand/contract animation and wavy inner glow effect.",
+      "acceptance_criteria": [
+        "Circle expands during inhale phase (4 seconds)",
+        "Circle stays expanded during hold phase (2 seconds)",
+        "Circle contracts during exhale phase (6 seconds)",
+        "Wavy inner glow animates around circumference continuously",
+        "Circle displays current phase text: 'inhale', 'hold', 'exhale'",
+        "Smooth easing animations using react-native-reanimated"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "title": "Implement breathing pattern indicator pill",
+      "description": "Create top indicator showing breathing pattern (nose 4, mouth 6). Reference step5.jpg, step6.jpg, step7.jpg.",
+      "acceptance_criteria": [
+        "Rounded rectangle pill container at top of screen",
+        "Nose icon with '4' on left (inhale duration)",
+        "Mouth icon with '6' on right (exhale duration)",
+        "Semi-transparent dark background",
+        "Only visible during active breathing (not during countdown or completion)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "title": "Implement breathing cycle loop with phases",
+      "description": "Execute the breathing loop: inhale (4s) -> hold (2s) -> exhale (6s) for configured number of cycles.",
+      "acceptance_criteria": [
+        "Breathing pattern: 4s inhale, 2s hold, 6s exhale (12s per cycle)",
+        "Loop runs for configured number of cycles (default 3)",
+        "Phase transitions trigger circle animation",
+        "Current phase displayed in circle",
+        "Track cycle count for stats"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 8,
+      "title": "Add poetic subtitles for each phase",
+      "description": "Display different supportive poetic messages below the circle that change each cycle. Reference step5.jpg placeholder text.",
+      "acceptance_criteria": [
+        "At least 5 different messages for inhale phase",
+        "At least 5 different messages for hold phase",
+        "At least 5 different messages for exhale phase",
+        "Messages rotate each cycle (don't repeat in same session)",
+        "Text fades in/out smoothly on phase change",
+        "Mello voice: trauma-informed, Gen-Z friendly, poetic"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 9,
+      "title": "Implement haptic feedback",
+      "description": "Add haptic pulse on phase transitions when vibration is enabled.",
+      "acceptance_criteria": [
+        "Haptic pulse triggers at start of inhale phase",
+        "Haptic pulse triggers at start of hold phase",
+        "Haptic pulse triggers at start of exhale phase",
+        "Haptics respect user's vibration toggle setting",
+        "Use expo-haptics for vibration",
+        "Light impact style for subtle feedback"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 10,
+      "title": "Implement completion screen",
+      "description": "Show encouraging completion screen with poetic message, breathing facts, and stats. Reference step8.jpg.",
+      "acceptance_criteria": [
+        "Poetic subtitle at top",
+        "Poetic encouraging title with breathing facts",
+        "Stats displayed: cycles completed, total duration",
+        "Next arrow button at bottom right",
+        "AnimatedText for title reveal",
+        "Smooth fade-in for all elements"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 11,
+      "title": "Update navigation flow and step counts",
+      "description": "Update discomfort.tsx to navigate to inhale-exhale, update all screens to show 8 total steps.",
+      "acceptance_criteria": [
+        "discomfort.tsx navigates to inhale-exhale on next",
+        "inhale-exhale.tsx navigates to insight on completion",
+        "All get-rolling screens updated: TOTAL_STEPS = 8",
+        "inhale-exhale is CURRENT_STEP = 7",
+        "insight is CURRENT_STEP = 8",
+        "Progress bars calculate correctly"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": 12,
+      "title": "Polish and test complete flow",
+      "description": "Final polish pass: test all animations, transitions, haptics, and edge cases.",
+      "acceptance_criteria": [
+        "Smooth screen transition from discomfort",
+        "All countdown animations work",
+        "Breathing circle expands/contracts smoothly",
+        "Wavy glow effect animates properly",
+        "Haptics fire at correct times",
+        "Bottom sheet opens/closes correctly",
+        "Cycle customization persists during session",
+        "Completion stats are accurate",
+        "Navigation to insight works"
+      ],
+      "status": "pending"
+    }
+  ]
+}

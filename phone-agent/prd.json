@@ -1,0 +1,141 @@
+{
+  "feature": "Mello Phone Agent - WhatsApp Voice AI",
+  "description": "Voice-based mental health support via WhatsApp calls using Hume.ai EVI",
+  "epic": "phone-agent",
+  "stories": [
+    {
+      "id": "PA-001",
+      "title": "WhatsApp Webhook Server",
+      "description": "FastAPI server that handles WhatsApp webhook verification and call events",
+      "status": "done",
+      "acceptance_criteria": [
+        "GET /webhook returns challenge for Meta verification",
+        "POST /webhook receives call events",
+        "Validates WHATSAPP_WEBHOOK_VERIFICATION_TOKEN",
+        "Logs all incoming webhook events"
+      ]
+    },
+    {
+      "id": "PA-002",
+      "title": "Pipecat Pipeline Setup",
+      "description": "Basic Pipecat pipeline with SmallWebRTCTransport for WhatsApp audio",
+      "status": "done",
+      "acceptance_criteria": [
+        "SmallWebRTCTransport configured for WhatsApp",
+        "VAD (Silero) for turn-taking",
+        "Pipeline connects input → LLM → output",
+        "Event handlers for connect/disconnect"
+      ]
+    },
+    {
+      "id": "PA-003",
+      "title": "Hume TTS Integration",
+      "description": "Integrate HumeTTSService for empathic voice synthesis",
+      "status": "pending",
+      "acceptance_criteria": [
+        "HumeTTSService configured with voice_id",
+        "Audio resampling for WhatsApp (48kHz → 8kHz)",
+        "Voice parameters tuned for mental health context",
+        "Fallback handling if Hume unavailable"
+      ]
+    },
+    {
+      "id": "PA-004",
+      "title": "Mental Health System Prompt",
+      "description": "Create trauma-informed system prompt for empathic conversations",
+      "status": "done",
+      "acceptance_criteria": [
+        "Warm, Gen-Z friendly greeting",
+        "Active listening techniques",
+        "Validation phrases",
+        "Appropriate boundaries (not a therapist)"
+      ]
+    },
+    {
+      "id": "PA-005",
+      "title": "Crisis Detection",
+      "description": "Detect crisis keywords and provide appropriate resources",
+      "status": "pending",
+      "acceptance_criteria": [
+        "Regex patterns for crisis phrases",
+        "Provides 988 hotline information",
+        "Stays present during crisis",
+        "Logs crisis events for review"
+      ]
+    },
+    {
+      "id": "PA-006",
+      "title": "LLM Integration (Claude/Gemini)",
+      "description": "Integrate preferred LLM for conversation handling",
+      "status": "in_progress",
+      "acceptance_criteria": [
+        "Supports Gemini Live (real-time voice)",
+        "Optional Claude integration for deeper context",
+        "System prompt injection",
+        "Context management across turns"
+      ]
+    },
+    {
+      "id": "PA-007",
+      "title": "Call Lifecycle Management",
+      "description": "Handle call start, active, and end states properly",
+      "status": "pending",
+      "acceptance_criteria": [
+        "Track active calls in memory",
+        "Graceful cleanup on disconnect",
+        "Handle multiple concurrent calls",
+        "Call duration logging"
+      ]
+    },
+    {
+      "id": "PA-008",
+      "title": "WhatsApp Business Setup",
+      "description": "Configure WhatsApp Business API and verify phone number",
+      "status": "pending",
+      "acceptance_criteria": [
+        "Phone number +1 650 643 5030 registered",
+        "Voice calling enabled",
+        "Webhook configured and verified",
+        "Test call successful"
+      ]
+    },
+    {
+      "id": "PA-009",
+      "title": "Deployment Pipeline",
+      "description": "Deploy phone agent to production with HTTPS",
+      "status": "pending",
+      "acceptance_criteria": [
+        "Deployed to Railway/Render/Fly.io",
+        "HTTPS endpoint configured",
+        "Environment variables secured",
+        "Health check monitoring"
+      ]
+    },
+    {
+      "id": "PA-010",
+      "title": "Audio Quality Optimization",
+      "description": "Optimize audio quality for WhatsApp telephony constraints",
+      "status": "pending",
+      "acceptance_criteria": [
+        "Handle 8kHz input properly",
+        "Minimize latency (<500ms)",
+        "No audio artifacts/glitches",
+        "Volume normalization"
+      ]
+    }
+  ],
+  "tech_stack": {
+    "framework": "Pipecat",
+    "server": "FastAPI + Uvicorn",
+    "voice_ai": "Hume.ai EVI",
+    "llm": "Google Gemini Live / Anthropic Claude",
+    "transport": "SmallWebRTC",
+    "language": "Python 3.10+"
+  },
+  "resources": {
+    "pipecat_docs": "https://docs.pipecat.ai",
+    "pipecat_whatsapp_example": "https://github.com/pipecat-ai/pipecat-examples/tree/main/whatsapp",
+    "hume_docs": "https://dev.hume.ai",
+    "whatsapp_api": "https://developers.facebook.com/docs/whatsapp/cloud-api"
+  }
+}

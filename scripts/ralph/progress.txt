@@ -1,0 +1,67 @@
+# Ralph Progress - Inhale-Exhale Breathing Screen
+# Feature: Get Rolling Step 7 - Breathing Exercise
+# Created: 2026-02-13
+
+## Requirements Summary (User Selections)
+- Q1: Breathing pattern → D: 4-2-6 (4s inhale, 2s hold, 6s exhale)
+- Q2: Cycles → C: User customizable, default 3
+- Q3: Circle animation → A: Expand inhale, stay hold, contract exhale + wavy inner glow
+- Q4: Poetic subtitles → B: Different messages each cycle
+- Q5: Haptic feedback → A: Pulse on phase transitions, toggleable
+- Q6: Customization UI → A: Bottom sheet with slider
+- Q7: Slider range → A: 1 to 5 cycles
+- Q8: Aurora theme → A: New soft teal/cyan calming theme
+- Q9: Completion screen → D: Message + fact + stats + next button
+- Q10: Navigation after → A: Direct to insight screen
+- Q11: File name → C: inhale-exhale.tsx
+- Q12: Step position → 7 of 8 (insight becomes 8)
+
+## Reference Images
+- C:\Users\hp\Downloads\inhale-exhale\step1.jpg - Intro/Start screen
+- C:\Users\hp\Downloads\inhale-exhale\step2.jpg - Countdown "3" inhale instruction
+- C:\Users\hp\Downloads\inhale-exhale\step3.jpg - Countdown "2" hold instruction
+- C:\Users\hp\Downloads\inhale-exhale\step4.jpg - Countdown "1" exhale instruction
+- C:\Users\hp\Downloads\inhale-exhale\step5.jpg - Breathing loop - inhale phase
+- C:\Users\hp\Downloads\inhale-exhale\step6.jpg - Breathing loop - hold phase (circle expanded)
+- C:\Users\hp\Downloads\inhale-exhale\step7.jpg - Breathing loop - exhale phase
+- C:\Users\hp\Downloads\inhale-exhale\step8.jpg - Completion screen
+- C:\Users\hp\Downloads\inhale-exhale\customisation-bottle-slideup sheet.jpg - Settings bottom sheet
+
+## Learnings & Patterns
+- Use `as const` for TypeScript tuple types with LinearGradient colors
+- Breathing circle animation: use scale transform with reanimated
+- Haptics: expo-haptics with ImpactFeedbackStyle.Light for subtle feedback
+- Bottom sheet: overlay with TouchableOpacity for dismiss on tap outside
+- Cycle slider: simple tick marks that are tappable
+
+## Story Progress
+- [x] Story 1: Base screen with aurora and header - COMPLETED
+- [x] Story 2: Intro state with title and Start button - COMPLETED
+- [x] Story 3: Customization bottom sheet - COMPLETED
+- [x] Story 4: Countdown sequence (3-2-1) - COMPLETED
+- [x] Story 5: Animated breathing circle component - COMPLETED
+- [x] Story 6: Breathing pattern indicator pill - COMPLETED
+- [x] Story 7: Breathing cycle loop - COMPLETED
+- [x] Story 8: Poetic subtitles - COMPLETED
+- [x] Story 9: Haptic feedback - COMPLETED
+- [x] Story 10: Completion screen - COMPLETED
+- [x] Story 11: Navigation flow updates - COMPLETED
+- [ ] Story 12: Polish and test - PENDING (manual testing required)
+
+## Files Modified
+- D:\mello-android\app\(get-rolling)\inhale-exhale.tsx - NEW (main screen)
+- D:\mello-android\app\(get-rolling)\discomfort.tsx - Updated navigation & TOTAL_STEPS
+- D:\mello-android\app\(get-rolling)\age.tsx - Updated TOTAL_STEPS to 8
+- D:\mello-android\app\(get-rolling)\avatar-analysis.tsx - Updated TOTAL_STEPS to 8
+- D:\mello-android\app\(get-rolling)\challenges.tsx - Updated TOTAL_STEPS to 8
+- D:\mello-android\app\(get-rolling)\style.tsx - Updated TOTAL_STEPS to 8
+- D:\mello-android\app\(get-rolling)\presence.tsx - Updated TOTAL_STEPS to 8
+- D:\mello-android\app\(get-rolling)\insight.tsx - Updated TOTAL_STEPS=8, CURRENT_STEP=8
+
+## Implementation Notes
+- Screen file: inhale-exhale.tsx (590+ lines)
+- Aurora theme: Soft teal/cyan (#50B8B8 accent)
+- Breathing timing: 4000ms inhale, 2000ms hold, 6000ms exhale
+- Circle sizes: 140px min, 200px max
+- Poetic messages: 5 for each phase (inhale/hold/exhale)
+- Stats shown: cycles completed, total time in seconds

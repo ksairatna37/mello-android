@@ -1,0 +1,36 @@
+[project]
+name = "mello-phone-agent"
+version = "0.1.0"
+description = "WhatsApp Voice AI for mental health support - Pipecat + Hume EVI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Pipecat with WhatsApp + Hume integration
+    "pipecat-ai[hume,silero,webrtc]>=0.0.101",
+
+    # Hume EVI SDK (for direct WebSocket)
+    "hume>=0.13.5",
+
+    # FastAPI server
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "aiohttp>=3.9.0",
+
+    # Utilities
+    "python-dotenv>=1.0.1",
+    "loguru>=0.7.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.1.0",
+    "ngrok>=1.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["I", "E", "W", "F"]
