@@ -479,7 +479,13 @@ export default function InhaleExhaleScreen() {
               <Animated.View style={leftButtonAnimatedStyle}>
                 <TouchableOpacity
                   style={[styles.controlButton, vibrationEnabled && styles.controlButtonActive]}
-                  onPress={() => setVibrationEnabled(!vibrationEnabled)}
+                  onPress={() => {
+                    const newValue = !vibrationEnabled;
+                    setVibrationEnabled(newValue);
+                    if (newValue) {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                  }}
                 >
                   <VibrationIcon active={vibrationEnabled} />
                 </TouchableOpacity>
@@ -610,7 +616,10 @@ export default function InhaleExhaleScreen() {
             <View style={styles.toggleContainer}>
               <TouchableOpacity
                 style={[styles.toggleOption, vibrationEnabled && styles.toggleOptionActive]}
-                onPress={() => setVibrationEnabled(true)}
+                onPress={() => {
+                  setVibrationEnabled(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
               >
                 <VibrationIcon active={vibrationEnabled} />
                 <Text style={[styles.toggleText, vibrationEnabled && styles.toggleTextActive]}>On</Text>
@@ -888,7 +897,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'flex-end',
   },
   overlayTouchable: {
@@ -899,7 +908,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   bottomSheet: {
-    backgroundColor: 'rgba(30,50,50,0.95)',
+    backgroundColor: 'rgb(30, 50, 50)',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 24,
