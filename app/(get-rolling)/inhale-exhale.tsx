@@ -466,7 +466,12 @@ export default function InhaleExhaleScreen() {
 
               <Animated.View style={startButtonAnimatedStyle}>
                 <View style={styles.startButtonWrapper}>
-                  <View style={styles.startButtonGlow} />
+                  <LinearGradient
+                    colors={['#FFFFFF', '#80D0D8']}
+                    style={styles.startButtonGlow}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                  />
                   <TouchableOpacity style={styles.startButton} onPress={handleStart}>
                     <Text style={styles.startButtonText}>Start</Text>
                   </TouchableOpacity>
@@ -680,10 +685,10 @@ const styles = StyleSheet.create({
   },
   startButtonGlow: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    opacity: 0.6,
   },
   startButton: {
     width: 100,
@@ -696,7 +701,7 @@ const styles = StyleSheet.create({
   startButtonText: {
     fontSize: 20,
     fontFamily: 'Outfit-SemiBold',
-    color: '#1A3030',
+    color: '#386068',
   },
 
   // Center Container (Countdown & Breathing)
