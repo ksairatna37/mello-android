@@ -186,6 +186,14 @@ export default function InhaleExhaleScreen() {
   const breathingOpacity = useSharedValue(0);
   const completeOpacity = useSharedValue(0);
 
+  // Button entrance animations
+  const startButtonTranslateY = useSharedValue(80);
+  const startButtonOpacity = useSharedValue(0);
+  const leftButtonTranslateX = useSharedValue(-60);
+  const leftButtonOpacity = useSharedValue(0);
+  const rightButtonTranslateX = useSharedValue(60);
+  const rightButtonOpacity = useSharedValue(0);
+
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
@@ -202,6 +210,31 @@ export default function InhaleExhaleScreen() {
       -1,
       false
     );
+  }, []);
+
+  // Button entrance animations (after title animation completes)
+  useEffect(() => {
+    // Title animation takes ~3 seconds (8 words * ~350ms each)
+    // After title completes + 1 second delay, animate start button
+    const startButtonTimer = setTimeout(() => {
+      startButtonOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
+      startButtonTranslateY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.2)) });
+    }, 3500);
+
+    // After start button + 1 second, animate side buttons
+    const sideButtonsTimer = setTimeout(() => {
+      // Vibration button slides in from left
+      leftButtonOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
+      leftButtonTranslateX.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) });
+      // Filter button slides in from right
+      rightButtonOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
+      rightButtonTranslateX.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) });
+    }, 4500);
+
+    return () => {
+      clearTimeout(startButtonTimer);
+      clearTimeout(sideButtonsTimer);
+    };
   }, []);
 
   // Trigger haptic feedback
@@ -351,6 +384,22 @@ export default function InhaleExhaleScreen() {
     opacity: completeOpacity.value,
   }));
 
+  // Button entrance animated styles
+  const startButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: startButtonOpacity.value,
+    transform: [{ translateY: startButtonTranslateY.value }],
+  }));
+
+  const leftButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: leftButtonOpacity.value,
+    transform: [{ translateX: leftButtonTranslateX.value }],
+  }));
+
+  const rightButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: rightButtonOpacity.value,
+    transform: [{ translateX: rightButtonTranslateX.value }],
+  }));
+
   // Customization bottom sheet handlers
   const openCustomization = () => {
     setTempCycles(totalCycles);
@@ -406,20 +455,26 @@ export default function InhaleExhaleScreen() {
 
             {/* Bottom Controls */}
             <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
-              <TouchableOpacity
-                style={[styles.controlButton, vibrationEnabled && styles.controlButtonActive]}
-                onPress={() => setVibrationEnabled(!vibrationEnabled)}
-              >
-                <VibrationIcon active={vibrationEnabled} />
-              </TouchableOpacity>
+              <Animated.View style={leftButtonAnimatedStyle}>
+                <TouchableOpacity
+                  style={[styles.controlButton, vibrationEnabled && styles.controlButtonActive]}
+                  onPress={() => setVibrationEnabled(!vibrationEnabled)}
+                >
+                  <VibrationIcon active={vibrationEnabled} />
+                </TouchableOpacity>
+              </Animated.View>
 
-              <TouchableOpacity style={styles.startButton} onPress={handleStart}>
-                <Text style={styles.startButtonText}>Start</Text>
-              </TouchableOpacity>
+              <Animated.View style={startButtonAnimatedStyle}>
+                <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+                  <Text style={styles.startButtonText}>Start</Text>
+                </TouchableOpacity>
+              </Animated.View>
 
-              <TouchableOpacity style={styles.controlButton} onPress={openCustomization}>
-                <FilterIcon />
-              </TouchableOpacity>
+              <Animated.View style={rightButtonAnimatedStyle}>
+                <TouchableOpacity style={styles.controlButton} onPress={openCustomization}>
+                  <FilterIcon />
+                </TouchableOpacity>
+              </Animated.View>
             </View>
           </Animated.View>
         )}
@@ -601,7 +656,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: 40,
   },
   controlButton: {
     width: 56,
@@ -615,20 +670,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(80,184,184,0.2)',
   },
   startButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
-    shadowRadius: 30,
+    shadowRadius: 25,
     elevation: 10,
   },
   startButtonText: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Outfit-SemiBold',
     color: '#1A3030',
   },
