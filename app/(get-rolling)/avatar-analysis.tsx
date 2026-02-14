@@ -67,7 +67,7 @@ type FlowState =
   | 'show_reply'
   | 'complete';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 5;
 const CURRENT_STEP = 2;
 
 export default function AvatarAnalysisScreen() {
@@ -199,7 +199,7 @@ export default function AvatarAnalysisScreen() {
     ExpoSpeechRecognitionModule.stop();
   };
 
-  const handleNext = () => router.push('/(get-rolling)/challenges');
+  const handleNext = () => router.push('/(get-rolling)/discomfort');
   const handleClose = () => router.replace('/(main)/chat');
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({

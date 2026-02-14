@@ -66,8 +66,8 @@ type FlowState =
   | 'show_reply'
   | 'complete';
 
-const TOTAL_STEPS = 8;
-const CURRENT_STEP = 6;
+const TOTAL_STEPS = 5;
+const CURRENT_STEP = 3;
 
 export default function DiscomfortScreen() {
   const router = useRouter();

@@ -59,8 +59,8 @@ type FlowState =
   | 'show_reply'
   | 'complete';
 
-const TOTAL_STEPS = 8;
-const CURRENT_STEP = 8;
+const TOTAL_STEPS = 5;
+const CURRENT_STEP = 5;
 
 export default function InsightScreen() {
   const router = useRouter();

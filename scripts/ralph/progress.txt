@@ -14,7 +14,7 @@
 - Q9: Completion screen → D: Message + fact + stats + next button
 - Q10: Navigation after → A: Direct to insight screen
 - Q11: File name → C: inhale-exhale.tsx
-- Q12: Step position → 7 of 8 (insight becomes 8)
+- Q12: Step position → 4 of 5 (reduced flow: Age→Avatar→Discomfort→InhaleExhale→Insight)
 
 ## Reference Images
 - C:\Users\hp\Downloads\inhale-exhale\step1.jpg - Intro/Start screen
@@ -65,3 +65,4 @@
 - Circle sizes: 140px min, 200px max
 - Poetic messages: 5 for each phase (inhale/hold/exhale)
 - Stats shown: cycles completed, total time in seconds
+- Vibration toggle icons: Fixed (ON=waves, OFF=no waves) - don't change based on state

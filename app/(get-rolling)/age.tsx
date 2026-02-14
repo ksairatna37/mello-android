@@ -45,7 +45,7 @@ type FlowState =
   | 'show_reply'
   | 'complete';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 5;
 
 export default function AgeScreen() {
   const router = useRouter();

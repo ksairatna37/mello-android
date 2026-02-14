@@ -17,10 +17,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import AuroraGradient, { AuroraTheme } from '@/components/common/AuroraGradient';
+import AuroraGradient from '@/components/common/AuroraGradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TOTAL_STEPS = 6;
+
+// Aurora theme type (legacy - kept for backwards compatibility)
+export type AuroraTheme = 'default' | 'warmPink' | 'deepPurple' | 'coolTeal' | 'softLavender' | 'deepIndigo' | 'darkEmerald';
 
 // Progress bar fill colors for each theme (darker tone of the gradient)
 const PROGRESS_COLORS: Record<AuroraTheme, string> = {

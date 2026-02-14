@@ -11,6 +11,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Vibration,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
@@ -26,19 +28,21 @@ import Animated, {
   interpolate,
   runOnJS,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Stop, Circle, Path, Rect, G, Line, Filter, FeGaussianBlur } from 'react-native-svg';
 
-// Custom Vibration Icon (phone with waves when active, just phone when off)
-const VibrationIcon = ({ active = false }: { active?: boolean }) => {
-  const color = active ? '#50B8B8' : 'rgb(255, 255, 255)';
+// Custom Vibration Icon (phone with waves when showWaves=true)
+// isSelected controls the color: teal when selected, muted when not
+const VibrationIcon = ({ showWaves = false, isSelected = false }: { showWaves?: boolean; isSelected?: boolean }) => {
+  const color = isSelected ? '#50B8B8' : '#ffffff80';
   return (
     <Svg width={42} height={42} viewBox="-3 0 30 24" fill="none">
-      {/* Left waves - only show when active */}
-      {active && (
+      {/* Left waves - only show when showWaves is true */}
+      {showWaves && (
         <>
           <Path
             d="M5 14.5C3.8 13.2 3.8 10.8 5 9.5"
@@ -68,8 +72,8 @@ const VibrationIcon = ({ active = false }: { active?: boolean }) => {
       />
       {/* Screen line */}
       <Line x1={10} y1={7.5} x2={14} y2={7.5} stroke={color} strokeWidth={1} opacity={0.5} />
-      {/* Right waves - only show when active */}
-      {active && (
+      {/* Right waves - only show when showWaves is true */}
+      {showWaves && (
         <>
           <Path
             d="M19 14.5C20.2 13.2 20.2 10.8 19 9.5"
@@ -107,10 +111,114 @@ const FilterIcon = () => {
   );
 };
 
+// Nose Icon for Inhale (with inward arrows)
+const NoseIcon = () => {
+  const color = 'rgba(255, 255, 255, 0.9)';
+  return (
+    <Svg width={28} height={28} viewBox="0 0 32 32" fill="none">
+      {/* Nose bridge */}
+      <Path
+        d="M16 4C16 4 14 8 14 12C14 16 12 20 10 22C8 24 10 26 12 26C14 26 15 25 16 25C17 25 18 26 20 26C22 26 24 24 22 22C20 20 18 16 18 12C18 8 16 4 16 4Z"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Left nostril */}
+      <Path
+        d="M12 23C12 23 13 22 14 22"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+      />
+      {/* Right nostril */}
+      <Path
+        d="M20 23C20 23 19 22 18 22"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+      />
+      {/* Left arrow (pointing inward) */}
+      <Path
+        d="M4 20L8 18M8 18L6 14M8 18L4 16"
+        stroke={color}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Right arrow (pointing inward) */}
+      <Path
+        d="M28 20L24 18M24 18L26 14M24 18L28 16"
+        stroke={color}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+// Lips Icon for Exhale (with outward arrows)
+const LipsIcon = () => {
+  const color = 'rgba(255, 255, 255, 0.9)';
+  return (
+    <Svg width={28} height={28} viewBox="0 0 32 32" fill="none">
+      {/* Upper lip */}
+      <Path
+        d="M6 16C6 16 8 12 12 12C14 12 15 14 16 14C17 14 18 12 20 12C24 12 26 16 26 16"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Lower lip */}
+      <Path
+        d="M6 16C6 16 8 22 16 22C24 22 26 16 26 16"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Lip line */}
+      <Path
+        d="M8 16C8 16 12 17 16 17C20 17 24 16 24 16"
+        stroke={color}
+        strokeWidth={1}
+        strokeLinecap="round"
+        opacity={0.6}
+      />
+      {/* Left arrow (pointing outward) */}
+      <Path
+        d="M8 18L4 20M4 20L6 24M4 20L8 22"
+        stroke={color}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Right arrow (pointing outward) */}
+      <Path
+        d="M24 18L28 20M28 20L26 24M28 20L24 22"
+        stroke={color}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
 import AuroraGradient from '@/components/common/AuroraGradient';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Slider configuration
+const SLIDER_WIDTH = SCREEN_WIDTH - 48 - 48; // Screen - sheet padding - container padding
+const CYCLE_LABEL_HEIGHT = 56; // Height of each label in the reel
+const EASE_OUT = Easing.bezier(0.25, 0.1, 0.25, 1);
 
 // Soft Teal/Cyan Aurora - Calming Breath Theme
 const AURORA_GRADIENT = ['#E0F8F8', '#B8E8E8', '#68B8B8', '#285858', '#102028', '#80D0D8'] as const;
@@ -128,19 +236,20 @@ const EXHALE_DURATION = 6000;
 const CYCLE_DURATION = INHALE_DURATION + HOLD_DURATION + EXHALE_DURATION;
 
 // Circle sizes
-const CIRCLE_MIN_SIZE = 140;
-const CIRCLE_MAX_SIZE = 200;
+const CIRCLE_MIN_SIZE = 160;
+const CIRCLE_MAX_SIZE = 250;
 
 type ScreenState =
   | 'intro'
   | 'countdown'
   | 'breathing'
-  | 'complete';
+  | 'complete'
+  | 'skipped';
 
 type BreathPhase = 'inhale' | 'hold' | 'exhale';
 
-const TOTAL_STEPS = 8;
-const CURRENT_STEP = 7;
+const TOTAL_STEPS = 5;
+const CURRENT_STEP = 4;
 
 // Poetic messages for each phase (rotate through cycles)
 const INHALE_MESSAGES = [
@@ -167,6 +276,21 @@ const EXHALE_MESSAGES = [
   'With each breath, you heal',
 ];
 
+// Encouraging messages for skipped state
+const SKIPPED_MESSAGES = [
+  "That's okay, you showed up. Sometimes just being here is the bravest step.",
+  "No pressure, no judgment. Your breath will wait for you whenever you're ready.",
+  "It takes courage to pause. You're already doing something beautiful.",
+  "Even one breath counts. You've planted a seed of calm within you.",
+  "This moment of trying is a gift to yourself. Be proud you began.",
+  "Don't worry about doing it 'right' - just doing it at all is a win. Your breath is your ally, not a taskmaster.",
+  "You are not alone in this. Many have felt the same hesitation. It’s okay to take it slow.",
+  "Your worth is not measured by how many breaths you take, but by the courage it takes to try. You are enough.",
+  "The fact that you even considered doing this is a sign of your strength. Be gentle with yourself, and know that you can return to this moment whenever you need.",
+  "Remember, the breath is always with you, even if you choose not to engage with it right now. It’s a source of comfort and calm that you can access in your own time. You are doing great just by being here.",
+  "Don't blame yourself for feeling hesitant. The fact that you want to do this shows your desire for growth and calm. Be proud of yourself for taking the first step, even if it feels small.But remember to continue",
+];
+
 export default function InhaleExhaleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -187,12 +311,16 @@ export default function InhaleExhaleScreen() {
 
   // Animation values
   const circleScale = useSharedValue(1);
+  const circleMiddleScale = useSharedValue(1); // Separate scale for faster middle fill animation
   const glowOpacity = useSharedValue(0.5);
   const glowRotation = useSharedValue(0);
   const introOpacity = useSharedValue(1);
   const countdownOpacity = useSharedValue(0);
   const breathingOpacity = useSharedValue(0);
   const completeOpacity = useSharedValue(0);
+  const skippedOpacity = useSharedValue(0);
+  const longPressTextOpacity = useSharedValue(0);
+  const longPressTextTranslateY = useSharedValue(30);
 
   // Button entrance animations
   const startButtonTranslateY = useSharedValue(80);
@@ -205,6 +333,56 @@ export default function InhaleExhaleScreen() {
   // Bottom sheet animations
   const sheetTranslateY = useSharedValue(400);
   const overlayOpacity = useSharedValue(0);
+
+  // Cycle slider shared values
+  const sliderStartX = useSharedValue(0);
+  const currentCycleShared = useSharedValue(3); // Track on UI thread (value 1-5)
+  const cycleLabelY = useSharedValue(-2 * CYCLE_LABEL_HEIGHT); // Start at 3 (index 2)
+
+  // Sync slider stage to JS state
+  const syncCycleToJS = useCallback((newCycleValue: number) => {
+    setTempCycles(newCycleValue);
+    Vibration.vibrate(Platform.OS === 'ios' ? 50 : 70);
+  }, []);
+
+  // Pan gesture for cycle slider - horizontal drag across ticks
+  const cyclePanGesture = Gesture.Pan()
+    .onStart((event) => {
+      'worklet';
+      sliderStartX.value = event.x;
+    })
+    .onUpdate((event) => {
+      'worklet';
+      // Calculate which tick we're at based on x position
+      const trackWidth = SLIDER_WIDTH - 40; // Account for padding
+      const normalizedX = Math.max(0, Math.min(event.x, trackWidth));
+      const progress = normalizedX / trackWidth;
+
+      // Smooth continuous label scroll based on drag position
+      cycleLabelY.value = -progress * 4 * CYCLE_LABEL_HEIGHT;
+
+      const cycleValue = Math.round(progress * 4) + 1; // 1 to 5
+      const clampedCycle = Math.max(1, Math.min(5, cycleValue));
+
+      if (clampedCycle !== currentCycleShared.value) {
+        currentCycleShared.value = clampedCycle;
+        runOnJS(syncCycleToJS)(clampedCycle);
+      }
+    })
+    .onEnd(() => {
+      'worklet';
+      // Snap label to nearest value
+      const targetY = -(currentCycleShared.value - 1) * CYCLE_LABEL_HEIGHT;
+      cycleLabelY.value = withTiming(targetY, {
+        duration: 200,
+        easing: EASE_OUT,
+      });
+    });
+
+  // Label reel animated style
+  const cycleLabelReelStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: cycleLabelY.value }],
+  }));
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -252,7 +430,7 @@ export default function InhaleExhaleScreen() {
   // Trigger haptic feedback
   const triggerHaptic = useCallback(() => {
     if (vibrationEnabled) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
   }, [vibrationEnabled]);
 
@@ -270,7 +448,8 @@ export default function InhaleExhaleScreen() {
     setCurrentPhase('inhale');
     setCycleCount(cycle);
     triggerHaptic();
-    circleScale.value = withTiming(CIRCLE_MAX_SIZE / CIRCLE_MIN_SIZE, {
+    // Middle fill animates at normal pace
+    circleMiddleScale.value = withTiming(CIRCLE_MAX_SIZE / CIRCLE_MIN_SIZE, {
       duration: INHALE_DURATION,
       easing: Easing.inOut(Easing.ease),
     });
@@ -284,7 +463,8 @@ export default function InhaleExhaleScreen() {
         // Exhale phase
         setCurrentPhase('exhale');
         triggerHaptic();
-        circleScale.value = withTiming(1, {
+        // Middle fill animates at normal pace
+        circleMiddleScale.value = withTiming(1, {
           duration: EXHALE_DURATION,
           easing: Easing.inOut(Easing.ease),
         });
@@ -297,40 +477,87 @@ export default function InhaleExhaleScreen() {
     }, INHALE_DURATION);
   }, [totalCycles, triggerHaptic, circleScale, breathingOpacity, completeOpacity]);
 
-  // Start countdown sequence
+  // Start countdown sequence (with 2 second delay before countdown appears)
   const startCountdown = useCallback(() => {
     setScreenState('countdown');
     introOpacity.value = withTiming(0, { duration: 400 });
-    countdownOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
 
-    let count = 3;
-    setCountdown(count);
-    triggerHaptic();
+    // 2 second delay before countdown elements mount
+    setTimeout(() => {
+      countdownOpacity.value = withTiming(1, { duration: 400 });
 
-    const countdownInterval = setInterval(() => {
-      count--;
-      if (count > 0) {
-        setCountdown(count);
-        triggerHaptic();
-      } else {
-        clearInterval(countdownInterval);
-        // Start breathing
-        setScreenState('breathing');
-        countdownOpacity.value = withTiming(0, { duration: 400 });
-        breathingOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
-        setTimeout(() => runBreathingCycle(0), 800);
-      }
-    }, 1000);
+      let count = 3;
+      setCountdown(count);
+      triggerHaptic();
+
+      const countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          setCountdown(count);
+          triggerHaptic();
+        } else {
+          clearInterval(countdownInterval);
+          // Start breathing
+          setScreenState('breathing');
+          countdownOpacity.value = withTiming(0, { duration: 400 });
+          breathingOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
+          setTimeout(() => runBreathingCycle(0), 800);
+          // Slide up "long press to end" text after 3 seconds
+          setTimeout(() => {
+            longPressTextOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
+            longPressTextTranslateY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
+          }, 3000);
+        }
+      }, 1000);
+    }, 3000);
   }, [introOpacity, countdownOpacity, breathingOpacity, triggerHaptic, runBreathingCycle]);
 
-  // Handle Start button press
+  // Handle Start button press with exit animations
   const handleStart = () => {
-    startCountdown();
+    // First: Side buttons exit (slide out and fade)
+    leftButtonOpacity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.ease) });
+    leftButtonTranslateX.value = withTiming(-60, { duration: 400, easing: Easing.in(Easing.cubic) });
+    rightButtonOpacity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.ease) });
+    rightButtonTranslateX.value = withTiming(60, { duration: 400, easing: Easing.in(Easing.cubic) });
+
+    // Then: Start button slides down (after side buttons start exiting)
+    setTimeout(() => {
+      startButtonOpacity.value = withTiming(0, { duration: 400, easing: Easing.in(Easing.ease) });
+      startButtonTranslateY.value = withTiming(80, { duration: 500, easing: Easing.in(Easing.cubic) });
+    }, 200);
+
+    // Start countdown after all exit animations
+    setTimeout(() => {
+      startCountdown();
+    }, 600);
   };
 
   // Navigation
   const handleNext = () => router.push('/(get-rolling)/insight');
   const handleClose = () => router.replace('/(main)/chat');
+
+  // Handle long press to skip/end breathing
+  const handleLongPressSkip = () => {
+    // Clear any running timers
+    if (breathingTimerRef.current) {
+      clearTimeout(breathingTimerRef.current);
+      breathingTimerRef.current = null;
+    }
+    // Trigger haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Hide the long press text
+    longPressTextOpacity.value = withTiming(0, { duration: 200 });
+    // Transition to skipped state
+    setScreenState('skipped');
+    breathingOpacity.value = withTiming(0, { duration: 400 });
+    skippedOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
+  };
+
+  // Get random skipped message
+  const getSkippedMessage = () => {
+    const randomIndex = Math.floor(Math.random() * SKIPPED_MESSAGES.length);
+    return SKIPPED_MESSAGES[randomIndex];
+  };
 
   // Get current poetic message
   const getCurrentMessage = () => {
@@ -345,15 +572,15 @@ export default function InhaleExhaleScreen() {
     }
   };
 
-  // Get countdown instruction text
+  // Get countdown instruction text (short, readable in 1 second)
   const getCountdownText = () => {
     switch (countdown) {
       case 3:
-        return 'inhale through the nose';
+        return 'Inhale';
       case 2:
-        return 'hold the breath';
+        return 'Hold';
       case 1:
-        return 'then exhale through the mouth';
+        return 'Exhale';
       default:
         return '';
     }
@@ -375,6 +602,11 @@ export default function InhaleExhaleScreen() {
     transform: [{ scale: circleScale.value }],
   }));
 
+  // Faster animation for middle fill circle
+  const circleMiddleFillAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: circleMiddleScale.value }],
+  }));
+
   const glowAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${glowRotation.value}deg` }],
     opacity: interpolate(circleScale.value, [1, CIRCLE_MAX_SIZE / CIRCLE_MIN_SIZE], [0.4, 0.8]),
@@ -394,6 +626,15 @@ export default function InhaleExhaleScreen() {
 
   const completeAnimatedStyle = useAnimatedStyle(() => ({
     opacity: completeOpacity.value,
+  }));
+
+  const skippedAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: skippedOpacity.value,
+  }));
+
+  const longPressTextAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: longPressTextOpacity.value,
+    transform: [{ translateY: longPressTextTranslateY.value }],
   }));
 
   // Button entrance animated styles
@@ -424,6 +665,9 @@ export default function InhaleExhaleScreen() {
   // Customization bottom sheet handlers
   const openCustomization = () => {
     setTempCycles(totalCycles);
+    currentCycleShared.value = totalCycles;
+    // Reset label position to current value
+    cycleLabelY.value = -(totalCycles - 1) * CYCLE_LABEL_HEIGHT;
     setShowCustomization(true);
     overlayOpacity.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.ease) });
     sheetTranslateY.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) });
@@ -495,7 +739,7 @@ export default function InhaleExhaleScreen() {
                     }
                   }}
                 >
-                  <VibrationIcon active={vibrationEnabled} />
+                  <VibrationIcon showWaves={vibrationEnabled} isSelected={vibrationEnabled} />
                 </TouchableOpacity>
               </Animated.View>
 
@@ -532,11 +776,11 @@ export default function InhaleExhaleScreen() {
         {/* Countdown State */}
         {screenState === 'countdown' && (
           <Animated.View style={[styles.centerContainer, countdownAnimatedStyle]}>
-            <View style={styles.breathingCircle}>
-              <View style={styles.circleInner}>
+            <View style={styles.breathingCircleContainer}>
+              <View style={styles.circleOuterRing} />
+              <View style={styles.circleInnerSolid}>
                 <Text style={styles.countdownNumber}>{countdown}</Text>
               </View>
-              <View style={styles.circleGlow} />
             </View>
             <Text style={styles.countdownText}>{getCountdownText()}</Text>
           </Animated.View>
@@ -546,29 +790,67 @@ export default function InhaleExhaleScreen() {
         {screenState === 'breathing' && (
           <Animated.View style={[styles.centerContainer, breathingAnimatedStyle]}>
             {/* Breathing Pattern Indicator */}
-            <View style={styles.patternIndicator}>
+            {/* <View style={styles.patternIndicator}>
               <View style={styles.patternItem}>
-                <Text style={styles.patternIcon}>👃</Text>
+                <NoseIcon />
                 <Text style={styles.patternNumber}>4</Text>
               </View>
               <View style={styles.patternItem}>
-                <Text style={styles.patternIcon}>👄</Text>
+                <LipsIcon />
                 <Text style={styles.patternNumber}>6</Text>
               </View>
-            </View>
+            </View> */}
 
             {/* Animated Breathing Circle */}
             <View style={styles.breathingCircleContainer}>
-              <Animated.View style={[styles.circleGlowOuter, glowAnimatedStyle]} />
-              <Animated.View style={[styles.breathingCircle, circleAnimatedStyle]}>
-                <View style={styles.circleInner}>
-                  <Text style={styles.phaseText}>{currentPhase}</Text>
-                </View>
-              </Animated.View>
+              {/* Outer ring - static at max size */}
+              <View style={styles.circleOuterRing} />
+              {/* Middle fill area - animates */}
+              <Animated.View style={[styles.circleMiddleFill, circleMiddleFillAnimatedStyle]} />
+              {/* Inner solid circle with text */}
+              <View style={styles.circleInnerSolid}>
+                <Text style={styles.phaseText}>
+                  {currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1)}
+                </Text>
+              </View>
             </View>
 
             {/* Poetic Subtitle */}
             <Text style={styles.poeticMessage}>{getCurrentMessage()}</Text>
+
+            {/* Long Press to End - Lower screen area */}
+            <TouchableOpacity
+              style={styles.longPressArea}
+              onLongPress={handleLongPressSkip}
+              delayLongPress={1500}
+              activeOpacity={1}
+            >
+              <Animated.Text style={[styles.longPressText, longPressTextAnimatedStyle]}>
+                long press to end
+              </Animated.Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* Skipped State */}
+        {screenState === 'skipped' && (
+          <Animated.View style={[styles.completeContainer, skippedAnimatedStyle]}>
+            <Text style={styles.completeSubtitle}>
+              It's okay to pause
+            </Text>
+            <AnimatedText
+              text={getSkippedMessage()}
+              style={styles.completeTitle}
+              activeColor="#FFFFFF"
+              delayPerWord={100}
+              wordDuration={250}
+            />
+
+            <View style={[styles.nextButtonContainer, { paddingBottom: insets.bottom + 20 }]}>
+              <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+                <Ionicons name="arrow-forward" size={28} color="#1A3030" />
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         )}
 
@@ -629,31 +911,63 @@ export default function InhaleExhaleScreen() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
-                <VibrationIcon active={vibrationEnabled} />
+                <VibrationIcon showWaves={true} isSelected={vibrationEnabled} />
                 <Text style={[styles.toggleText, vibrationEnabled && styles.toggleTextActive]}>On</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleOption, !vibrationEnabled && styles.toggleOptionActive]}
                 onPress={() => setVibrationEnabled(false)}
               >
-                <VibrationIcon active={!vibrationEnabled} />
+                <VibrationIcon showWaves={false} isSelected={!vibrationEnabled} />
                 <Text style={[styles.toggleText, !vibrationEnabled && styles.toggleTextActive]}>Off</Text>
               </TouchableOpacity>
             </View>
 
             {/* Breathing Cycle Slider */}
-            <Text style={styles.sheetSectionTitle}>breathing cycle</Text>
+            <Text style={styles.sheetSectionTitle}>Breathing cycle</Text>
             <View style={styles.sliderContainer}>
-              <Text style={styles.sliderValue}>{tempCycles}</Text>
-              <View style={styles.sliderTrack}>
-                {[1, 2, 3, 4, 5].map((num) => (
-                  <TouchableOpacity
-                    key={num}
-                    style={[styles.sliderTick, num === tempCycles && styles.sliderTickActive]}
-                    onPress={() => setTempCycles(num)}
-                  />
-                ))}
+              {/* Animated label reel */}
+              <View style={styles.labelWindow}>
+                <Animated.View style={[styles.labelReel, cycleLabelReelStyle]}>
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <View key={num} style={styles.labelItem}>
+                      <Text style={[
+                        styles.sliderValue,
+                        num === tempCycles ? styles.labelActive : styles.labelInactive
+                      ]}>
+                        {num}
+                      </Text>
+                    </View>
+                  ))}
+                </Animated.View>
+                {/* Soft blur fade at top */}
+                <LinearGradient
+                  colors={['rgba(20,35,35,0.95)', 'rgba(20,35,35,0)']}
+                  style={styles.labelFadeTop}
+                  pointerEvents="none"
+                />
+                {/* Soft blur fade at bottom */}
+                <LinearGradient
+                  colors={['rgba(20,35,35,0)', 'rgba(20,35,35,0.95)']}
+                  style={styles.labelFadeBottom}
+                  pointerEvents="none"
+                />
               </View>
+
+              {/* Draggable tick track */}
+              <GestureDetector gesture={cyclePanGesture}>
+                <Animated.View style={styles.sliderTrack}>
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <View
+                      key={num}
+                      style={[
+                        styles.sliderTick,
+                        num === tempCycles && styles.sliderTickActive,
+                      ]}
+                    />
+                  ))}
+                </Animated.View>
+              </GestureDetector>
             </View>
 
             {/* Save Button */}
@@ -753,6 +1067,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -60,
   },
 
   // Breathing Pattern Indicator
@@ -770,7 +1085,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  patternIcon: { fontSize: 18 },
   patternNumber: {
     fontSize: 16,
     fontFamily: 'Outfit-SemiBold',
@@ -781,39 +1095,36 @@ const styles = StyleSheet.create({
   breathingCircleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: CIRCLE_MAX_SIZE + 40,
-    height: CIRCLE_MAX_SIZE + 40,
+    width: CIRCLE_MAX_SIZE + 80,
+    height: CIRCLE_MAX_SIZE + 80,
   },
-  breathingCircle: {
-    width: CIRCLE_MIN_SIZE,
-    height: CIRCLE_MIN_SIZE,
-    borderRadius: CIRCLE_MIN_SIZE / 2,
+  // Outer ring - static at max size
+  circleOuterRing: {
+    position: 'absolute',
+    width: CIRCLE_MAX_SIZE ,
+    height: CIRCLE_MAX_SIZE ,
+    borderRadius: (CIRCLE_MAX_SIZE + 40) / 2,
+    // borderWidth: 2,
+    // borderColor: 'rgba(120, 140, 160, 0.4)',
+    backgroundColor: '#64788c31',
+  },
+  // Middle fill area - semi-transparent
+  circleMiddleFill: {
+    position: 'absolute',
+    width: CIRCLE_MIN_SIZE - 30,
+    height: CIRCLE_MIN_SIZE - 30,
+    borderRadius: (CIRCLE_MIN_SIZE - 10) / 2,
+    backgroundColor: '#64788c9c',
+  },
+  // Inner solid circle with text
+  circleInnerSolid: {
+    width: 100,
+    height: 100,
+    borderRadius: 70,
+    backgroundColor: '#8ca0af99',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(20,40,40,0.8)',
-    borderWidth: 2,
-    borderColor: 'rgba(80,184,184,0.3)',
-  },
-  circleInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleGlow: {
-    position: 'absolute',
-    width: CIRCLE_MIN_SIZE + 30,
-    height: CIRCLE_MIN_SIZE + 30,
-    borderRadius: (CIRCLE_MIN_SIZE + 30) / 2,
-    backgroundColor: 'rgba(80,184,184,0.15)',
-    zIndex: -1,
-  },
-  circleGlowOuter: {
-    position: 'absolute',
-    width: CIRCLE_MAX_SIZE + 60,
-    height: CIRCLE_MAX_SIZE + 60,
-    borderRadius: (CIRCLE_MAX_SIZE + 60) / 2,
-    borderWidth: 2,
-    borderColor: 'rgba(80,184,184,0.2)',
-    backgroundColor: 'transparent',
+    zIndex: 1,
   },
   countdownNumber: {
     fontSize: 48,
@@ -828,9 +1139,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   phaseText: {
-    fontSize: 24,
-    fontFamily: 'Outfit-Regular',
+    fontSize: 20,
+    fontFamily: 'Outfit-Medium',
     color: '#FFFFFF',
+    textAlign: 'center',
   },
   poeticMessage: {
     fontSize: 20,
@@ -839,6 +1151,22 @@ const styles = StyleSheet.create({
     marginTop: 50,
     textAlign: 'center',
     paddingHorizontal: 20,
+    minHeight: 60,
+  },
+  longPressArea: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 150,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 40,
+  },
+  longPressText: {
+    fontSize: 14,
+    fontFamily: 'Outfit-Regular',
+    color: 'rgba(255,255,255,0.5)',
   },
 
   // Complete State
@@ -917,9 +1245,10 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     backgroundColor: 'rgb(30, 50, 50)',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderRadius: 32,
     padding: 24,
+    marginHorizontal: 10,
+    marginBottom: 20,
   },
   sheetHandle: {
     width: 40,
@@ -945,8 +1274,8 @@ const styles = StyleSheet.create({
   toggleContainer: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
-    padding: 4,
+    borderRadius: 25,
+    padding: 10,
     marginBottom: 24,
   },
   toggleOption: {
@@ -955,8 +1284,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 10,
-    gap: 8,
+    borderRadius: 20,
+    gap: 2,
   },
   toggleOptionActive: {
     backgroundColor: 'rgba(80,184,184,0.2)',
@@ -966,23 +1295,65 @@ const styles = StyleSheet.create({
   toggleText: {
     fontSize: 16,
     fontFamily: 'Outfit-Medium',
-    color: 'rgba(255,255,255,0.5)',
+    color: '#ffffff80',
   },
   toggleTextActive: {
     color: '#50B8B8',
   },
   sliderContainer: {
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
+    borderRadius: 25,
     padding: 20,
     alignItems: 'center',
     marginBottom: 24,
+  },
+  // Label window (visible mask for the scrolling reel)
+  labelWindow: {
+    height: CYCLE_LABEL_HEIGHT,
+    overflow: 'hidden',
+    marginBottom: 16,
+    position: 'relative',
+    width: '100%',
+    alignItems: 'center',
+  },
+  labelReel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  labelItem: {
+    height: CYCLE_LABEL_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  labelFadeTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 10,
+    zIndex: 10,
+  },
+  labelFadeBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 10,
+    zIndex: 10,
   },
   sliderValue: {
     fontSize: 48,
     fontFamily: 'Outfit-Bold',
     color: '#FFFFFF',
-    marginBottom: 16,
+  },
+  labelActive: {
+    opacity: 1,
+  },
+  labelInactive: {
+    opacity: 0.3,
+    transform: [{ scale: 0.85 }],
   },
   sliderTrack: {
     flexDirection: 'row',
@@ -990,6 +1361,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     width: '100%',
     paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   sliderTick: {
     width: 8,
