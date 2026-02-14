@@ -212,6 +212,7 @@ const LipsIcon = () => {
 
 import AuroraGradient from '@/components/common/AuroraGradient';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { getOnboardingData } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -251,8 +252,12 @@ type BreathPhase = 'inhale' | 'hold' | 'exhale';
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 4;
 
-// Poetic messages for each phase (rotate through cycles)
-const INHALE_MESSAGES = [
+// ============================================================================
+// SAFE PERSONALIZATION - Warm presence, not psychology
+// ============================================================================
+
+// Default poetic messages (used when no personalization or 'exploring')
+const DEFAULT_INHALE = [
   'Draw in peace, let it fill you',
   'Breathe in possibility',
   'Welcome calm into your body',
@@ -260,7 +265,7 @@ const INHALE_MESSAGES = [
   'Gather your strength gently',
 ];
 
-const HOLD_MESSAGES = [
+const DEFAULT_HOLD = [
   'Hold this moment, you are safe',
   'Rest here, nothing to do',
   'In stillness, find yourself',
@@ -268,13 +273,135 @@ const HOLD_MESSAGES = [
   'Be present, just breathe',
 ];
 
-const EXHALE_MESSAGES = [
+const DEFAULT_EXHALE = [
   'Release what no longer serves you',
   'Let go, you are lighter now',
   'Breathe out the weight',
   'Surrender to the exhale',
   'With each breath, you heal',
 ];
+
+// Anxious: Focus on grounding, calm (not "fixing anxiety")
+const ANXIOUS_INHALE = [
+  'Let the breath ground you',
+  'Steady and slow, you are here',
+  'Calm is entering',
+  'Each breath brings peace',
+  'You are safe in this moment',
+];
+
+const ANXIOUS_HOLD = [
+  'Rest here, nothing to fix',
+  'This stillness is yours',
+  'Just be, nothing else',
+  'The pause holds you',
+  'You are okay right now',
+];
+
+const ANXIOUS_EXHALE = [
+  'Let the breath soften things',
+  'Slow and steady out',
+  'Release gently',
+  'Let the tension float away',
+  'Ease flows out',
+];
+
+// Stressed: Focus on release, lightness (not "eliminating stress")
+const STRESSED_INHALE = [
+  'Breathe in some space',
+  'Let air create room',
+  'Space is opening up',
+  'Room to breathe',
+  'Making space inside',
+];
+
+const STRESSED_HOLD = [
+  'Pause from everything',
+  'Nothing to do here',
+  'Just this moment',
+  'A break is allowed',
+  'Rest in the pause',
+];
+
+const STRESSED_EXHALE = [
+  'Let it go, just for now',
+  'Breathe out what you can',
+  'Release what you are ready to',
+  'Lighter with each breath',
+  'You can put it down here',
+];
+
+// Lonely: Focus on presence, connection (not "you are not alone")
+const LONELY_INHALE = [
+  'I am here with you',
+  'Breathing together now',
+  'We are in this breath',
+  'You are accompanied',
+  'This breath connects',
+];
+
+const LONELY_HOLD = [
+  'Held in this moment',
+  'Together in stillness',
+  'You are not breathing alone',
+  'Present with you',
+  'We pause together',
+];
+
+const LONELY_EXHALE = [
+  'Letting go, together',
+  'Breathing out as one',
+  'Connected in release',
+  'We exhale together',
+  'Shared breath, shared calm',
+];
+
+// High intensity (struggling): Extra gentle, simple, reassuring
+const GENTLE_INHALE = [
+  'Just this breath',
+  'Slowly, gently in',
+  'One breath at a time',
+  'Easy does it',
+  'Soft breath in',
+];
+
+const GENTLE_HOLD = [
+  'You are doing well',
+  'Rest here',
+  'Just be',
+  'This is enough',
+  'You are okay',
+];
+
+const GENTLE_EXHALE = [
+  'Gently out',
+  'Let it go easy',
+  'Soft release',
+  'No rush',
+  'Just let it flow out',
+];
+
+// Message sets by feeling
+type MessageSet = {
+  inhale: string[];
+  hold: string[];
+  exhale: string[];
+};
+
+const MESSAGE_SETS: Record<string, MessageSet> = {
+  anxious: { inhale: ANXIOUS_INHALE, hold: ANXIOUS_HOLD, exhale: ANXIOUS_EXHALE },
+  stressed: { inhale: STRESSED_INHALE, hold: STRESSED_HOLD, exhale: STRESSED_EXHALE },
+  lonely: { inhale: LONELY_INHALE, hold: LONELY_HOLD, exhale: LONELY_EXHALE },
+  burnout: { inhale: STRESSED_INHALE, hold: STRESSED_HOLD, exhale: STRESSED_EXHALE }, // Similar to stressed
+  default: { inhale: DEFAULT_INHALE, hold: DEFAULT_HOLD, exhale: DEFAULT_EXHALE },
+};
+
+// Gentle set for high intensity users (moodIntensity >= 2)
+const GENTLE_SET: MessageSet = {
+  inhale: GENTLE_INHALE,
+  hold: GENTLE_HOLD,
+  exhale: GENTLE_EXHALE,
+};
 
 // Encouraging messages for skipped state
 const SKIPPED_MESSAGES = [
@@ -300,6 +427,41 @@ export default function InhaleExhaleScreen() {
   const [countdown, setCountdown] = useState(3);
   const [currentPhase, setCurrentPhase] = useState<BreathPhase>('inhale');
   const [cycleCount, setCycleCount] = useState(0);
+
+  // Personalization state
+  const [activeMessageSet, setActiveMessageSet] = useState<MessageSet>(MESSAGE_SETS.default);
+  const [firstName, setFirstName] = useState<string>('');
+
+  // Load personalization from onboarding data
+  useEffect(() => {
+    const loadPersonalization = async () => {
+      const data = await getOnboardingData();
+
+      if (data.firstName) {
+        setFirstName(data.firstName);
+      }
+
+      // High intensity users get gentle messages (priority)
+      if (data.moodIntensity !== undefined && data.moodIntensity >= 2) {
+        setActiveMessageSet(GENTLE_SET);
+        return;
+      }
+
+      // Otherwise, personalize by primary feeling
+      if (data.selectedFeelings && data.selectedFeelings.length > 0) {
+        const primaryFeeling = data.selectedFeelings[0];
+        if (MESSAGE_SETS[primaryFeeling]) {
+          setActiveMessageSet(MESSAGE_SETS[primaryFeeling]);
+          return;
+        }
+      }
+
+      // Default messages
+      setActiveMessageSet(MESSAGE_SETS.default);
+    };
+
+    loadPersonalization();
+  }, []);
   const [totalCycles, setTotalCycles] = useState(3);
   const [vibrationEnabled, setVibrationEnabled] = useState(true);
   const [showCustomization, setShowCustomization] = useState(false);
@@ -559,16 +721,16 @@ export default function InhaleExhaleScreen() {
     return SKIPPED_MESSAGES[randomIndex];
   };
 
-  // Get current poetic message
+  // Get current poetic message (personalized based on user's feelings/intensity)
   const getCurrentMessage = () => {
     const messageIndex = cycleCount % 5;
     switch (currentPhase) {
       case 'inhale':
-        return INHALE_MESSAGES[messageIndex];
+        return activeMessageSet.inhale[messageIndex];
       case 'hold':
-        return HOLD_MESSAGES[messageIndex];
+        return activeMessageSet.hold[messageIndex];
       case 'exhale':
-        return EXHALE_MESSAGES[messageIndex];
+        return activeMessageSet.exhale[messageIndex];
     }
   };
 
