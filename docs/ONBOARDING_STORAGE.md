@@ -1,121 +1,293 @@
-# Onboarding Storage Utility
+# Mello Onboarding Storage System
 
-A centralized, database-ready storage system for user onboarding data.
+A centralized, database-ready storage system for capturing and persisting user onboarding data.
 
-## Location
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Storage Location](#storage-location)
+3. [Onboarding Flow](#onboarding-flow)
+4. [Data Structure](#data-structure)
+5. [Architecture](#architecture)
+6. [API Reference](#api-reference)
+7. [Screen Integration](#screen-integration)
+8. [Database Migration Guide](#database-migration-guide)
+9. [Best Practices](#best-practices)
+
+---
+
+## Overview
+
+The onboarding storage utility (`utils/onboardingStorage.ts`) provides:
+
+- **Centralized data management** for all onboarding screens
+- **Database-ready architecture** using the Adapter Pattern
+- **Automatic timestamps** for tracking and analytics
+- **Legacy compatibility** with existing avatar storage
+- **Type-safe API** with full TypeScript support
+
+---
+
+## Storage Location
+
+### Current: AsyncStorage (Local Device)
+
+Data is stored locally on the user's device using React Native's AsyncStorage.
+
+**Storage Path (Android):**
+```
+/data/data/com.mello.android/files/AsyncStorage/
+├── onboardingData     # Main onboarding data (JSON)
+└── userAvatar         # Legacy avatar key (backward compatibility)
+```
+
+**Storage Path (iOS):**
+```
+~/Library/Application Support/com.mello.android/
+├── RCTAsyncLocalStorage/
+│   ├── onboardingData
+│   └── userAvatar
+```
+
+**Storage Key:** `onboardingData`
+
+**Data Format:** JSON string
+
+---
+
+## Onboarding Flow
 
 ```
-utils/onboardingStorage.ts
+┌─────────────────────────────────────────────────────────────────┐
+│                     MELLO ONBOARDING FLOW                        │
+└─────────────────────────────────────────────────────────────────┘
+
+Step 1: Welcome Screen
+    │   (No data saved)
+    ▼
+Step 2: Disclaimer
+    │   (No data saved)
+    ▼
+Step 3: Name Input ──────────────────► Saves: firstName, lastName
+    │
+    ▼
+Step 4: Profile Picture ─────────────► Saves: avatarType, avatarValue
+    │
+    ▼
+Step 5: Feelings Selection ──────────► Saves: selectedFeelings[]
+    │
+    ▼
+Step 6: Mood Weight ─────────────────► Saves: moodIntensity
+    │   (Crisis check if "Struggling")
+    ▼
+Step 7: Terms & Trust ───────────────► Saves: termsAccepted, termsAcceptedAt
+    │
+    ▼
+Step 8: Permissions ─────────────────► Saves: notificationsEnabled, microphoneEnabled
+    │                                         onboardingCompleted, onboardingCompletedAt
+    ▼
+Step 9: Personalizing
+    │   (Loading screen - no data saved)
+    ▼
+    ┌──────────────────┐
+    │   ONBOARDING     │
+    │   COMPLETE       │
+    └──────────────────┘
 ```
 
-## Architecture
+---
 
-Uses the **Adapter Pattern** for easy database migration:
+## Data Structure
 
-```
-┌─────────────────────────────────────────┐
-│           Public API                     │
-│  (getOnboardingData, updateOnboardingData, etc.)
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│         StorageAdapter Interface         │
-│  - get(): Promise<OnboardingData>        │
-│  - set(data): Promise<void>              │
-│  - update(updates): Promise<void>        │
-│  - clear(): Promise<void>                │
-└─────────────────┬───────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        ▼                   ▼
-┌───────────────┐   ┌───────────────┐
-│ AsyncStorage  │   │   Supabase    │
-│   Adapter     │   │   Adapter     │
-│  (Current)    │   │  (Future)     │
-└───────────────┘   └───────────────┘
-```
-
-## Data Schema
+### OnboardingData Interface
 
 ```typescript
 interface OnboardingData {
-  // Step 3: Name Input
-  firstName?: string;
-  lastName?: string;
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 3: NAME INPUT
+  // ═══════════════════════════════════════════════════════════════
+  firstName?: string;              // User's first name
+  lastName?: string;               // User's last name
 
-  // Step 4: Profile Picture / Avatar
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 4: PROFILE PICTURE / AVATAR
+  // ═══════════════════════════════════════════════════════════════
   avatarType?: 'emoji' | 'icon' | 'image' | null;
-  avatarValue?: string | null;
+  avatarValue?: string | null;     // Emoji char, icon name, or image URI
 
-  // Step 5: Feelings Selection
-  selectedFeelings?: string[];  // ['anxious', 'stressed', 'lonely', ...]
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 5: FEELINGS SELECTION (Multi-select)
+  // ═══════════════════════════════════════════════════════════════
+  selectedFeelings?: string[];     // Array of feeling IDs
 
-  // Step 6: Mood Weight
-  moodIntensity?: number;  // 0-3 (Calm, Finding rhythm, Carrying a lot, Struggling)
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 6: MOOD WEIGHT
+  // ═══════════════════════════════════════════════════════════════
+  moodIntensity?: number;          // 0-3 scale
 
-  // Step 7: Terms & Trust
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 7: TERMS & TRUST
+  // ═══════════════════════════════════════════════════════════════
   termsAccepted?: boolean;
-  termsAcceptedAt?: string;  // ISO timestamp
+  termsAcceptedAt?: string;        // ISO 8601 timestamp
 
-  // Step 8: Permissions
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 8: PERMISSIONS
+  // ═══════════════════════════════════════════════════════════════
   notificationsEnabled?: boolean;
   microphoneEnabled?: boolean;
 
-  // Completion Tracking
-  completedSteps?: string[];
+  // ═══════════════════════════════════════════════════════════════
+  // COMPLETION TRACKING
+  // ═══════════════════════════════════════════════════════════════
+  completedSteps?: string[];       // ['name-input', 'profile-picture', ...]
   onboardingCompleted?: boolean;
-  onboardingCompletedAt?: string;  // ISO timestamp
+  onboardingCompletedAt?: string;  // ISO 8601 timestamp
 
-  // Timestamps
-  createdAt?: string;
-  updatedAt?: string;
+  // ═══════════════════════════════════════════════════════════════
+  // AUTOMATIC TIMESTAMPS
+  // ═══════════════════════════════════════════════════════════════
+  createdAt?: string;              // First data write
+  updatedAt?: string;              // Last data write
 }
 ```
 
-## Usage
+### Field Details
+
+#### Avatar Types
+
+| Type | Value Example | Description |
+|------|---------------|-------------|
+| `emoji` | `"😊"` | Single emoji character |
+| `icon` | `"heart-outline"` | Ionicons icon name |
+| `image` | `"file:///data/.../photo.jpg"` | Local file URI |
+
+#### Feelings Options
+
+| ID | Label |
+|----|-------|
+| `anxious` | Feeling anxious or worried |
+| `stressed` | Stressed or overwhelmed |
+| `lonely` | Lonely or disconnected |
+| `burnout` | Burnt out from work or life |
+| `relationship` | Relationship issues |
+| `sleep` | Trouble sleeping |
+| `talk` | Just want someone to talk to |
+| `exploring` | Exploring mental wellness |
+| `other` | Feeling something else |
+
+#### Mood Intensity Scale
+
+| Value | Label | Description |
+|-------|-------|-------------|
+| `0` | Calm | Feeling at peace |
+| `1` | Finding my rhythm | Managing okay |
+| `2` | Carrying a lot | Feeling burdened |
+| `3` | Struggling | Needs support (triggers crisis check) |
+
+---
+
+## Architecture
+
+### Adapter Pattern
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        PUBLIC API                                │
+│  ┌───────────────┐  ┌────────────────────┐  ┌───────────────┐  │
+│  │ getOnboarding │  │ updateOnboarding   │  │   getAvatar   │  │
+│  │    Data()     │  │      Data()        │  │      ()       │  │
+│  └───────────────┘  └────────────────────┘  └───────────────┘  │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│                    STORAGE ADAPTER INTERFACE                     │
+│                                                                  │
+│   interface StorageAdapter {                                     │
+│     get(): Promise<OnboardingData>;                             │
+│     set(data: OnboardingData): Promise<void>;                   │
+│     update(updates: Partial<OnboardingData>): Promise<void>;    │
+│     clear(): Promise<void>;                                     │
+│   }                                                              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+              ▼                 ▼                 ▼
+┌─────────────────────┐  ┌────────────────┐  ┌────────────────┐
+│   AsyncStorage      │  │   Supabase     │  │   Firebase     │
+│     Adapter         │  │    Adapter     │  │    Adapter     │
+│   ✓ ACTIVE          │  │   (Future)     │  │   (Future)     │
+└─────────────────────┘  └────────────────┘  └────────────────┘
+```
+
+---
+
+## API Reference
 
 ### Reading Data
 
 ```typescript
-import { getOnboardingData, getOnboardingField, getAvatar } from '@/utils/onboardingStorage';
+import {
+  getOnboardingData,
+  getOnboardingField,
+  getAvatar
+} from '@/utils/onboardingStorage';
 
-// Get all data
+// Get all onboarding data
 const data = await getOnboardingData();
-console.log(data.firstName, data.selectedFeelings);
+// Returns: OnboardingData object
 
 // Get specific field
 const firstName = await getOnboardingField('firstName');
+// Returns: string | undefined
 
-// Get avatar
+// Get avatar data
 const avatar = await getAvatar();
-console.log(avatar.type, avatar.value);
+// Returns: { type: string | null, value: string | null }
 ```
 
 ### Writing Data
 
 ```typescript
-import { updateOnboardingData, saveAvatar } from '@/utils/onboardingStorage';
+import {
+  updateOnboardingData,
+  setOnboardingData,
+  saveAvatar
+} from '@/utils/onboardingStorage';
 
-// Update specific fields (merges with existing)
+// Update specific fields (RECOMMENDED - merges with existing)
 await updateOnboardingData({
   firstName: 'John',
   lastName: 'Doe',
 });
 
-// Save avatar (also saves to legacy key for backward compatibility)
+// Replace all data (use with caution)
+await setOnboardingData({
+  firstName: 'John',
+  onboardingCompleted: true,
+});
+
+// Save avatar (includes legacy key support)
 await saveAvatar('emoji', '😊');
 ```
 
-### Completion Tracking
+### Tracking Progress
 
 ```typescript
-import { markStepCompleted, completeOnboarding } from '@/utils/onboardingStorage';
+import {
+  markStepCompleted,
+  completeOnboarding
+} from '@/utils/onboardingStorage';
 
-// Mark individual step as completed
+// Mark individual step complete
 await markStepCompleted('profile-picture');
 
-// Mark entire onboarding as complete
+// Mark entire onboarding complete
 await completeOnboarding();
+// Sets: onboardingCompleted = true, onboardingCompletedAt = timestamp
 ```
 
 ### Clearing Data
@@ -127,107 +299,172 @@ import { clearOnboardingData } from '@/utils/onboardingStorage';
 await clearOnboardingData();
 ```
 
-## Screens Using This Storage
+---
 
-| Screen | File | Data Saved |
-|--------|------|------------|
-| Name Input | `name-input.tsx` | `firstName`, `lastName` |
-| Profile Picture | `profile-picture.tsx` | `avatarType`, `avatarValue` |
-| Feelings Select | `feelings-select.tsx` | `selectedFeelings` |
-| Mood Weight | `mood-weight.tsx` | `moodIntensity` |
-| Terms & Trust | `terms-trust.tsx` | `termsAccepted`, `termsAcceptedAt` |
-| Permissions | `permissions.tsx` | `notificationsEnabled`, `microphoneEnabled`, `onboardingCompleted` |
+## Screen Integration
 
-## Migrating to Supabase
+### File Locations
 
-When ready to use a database, follow these steps:
+| Step | Screen File | Data Saved |
+|------|-------------|------------|
+| 3 | `app/(onboarding-new)/name-input.tsx` | `firstName`, `lastName` |
+| 4 | `app/(onboarding-new)/profile-picture.tsx` | `avatarType`, `avatarValue` |
+| 5 | `app/(onboarding-new)/feelings-select.tsx` | `selectedFeelings` |
+| 6 | `app/(onboarding-new)/mood-weight.tsx` | `moodIntensity` |
+| 7 | `app/(onboarding-new)/terms-trust.tsx` | `termsAccepted`, `termsAcceptedAt` |
+| 8 | `app/(onboarding-new)/permissions.tsx` | `notificationsEnabled`, `microphoneEnabled`, `onboardingCompleted` |
 
-### 1. Create Database Table
+### Integration Pattern
+
+```typescript
+// In any onboarding screen:
+
+import { updateOnboardingData } from '@/utils/onboardingStorage';
+
+const handleContinue = async () => {
+  // 1. Save data before navigating
+  await updateOnboardingData({
+    fieldName: fieldValue,
+  });
+
+  // 2. Navigate to next screen
+  router.push('/(onboarding-new)/next-screen');
+};
+```
+
+---
+
+## Database Migration Guide
+
+### Step 1: Create Supabase Table
 
 ```sql
+-- Create onboarding table
 CREATE TABLE user_onboarding (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+
+  -- Name
   first_name TEXT,
   last_name TEXT,
-  avatar_type TEXT,
+
+  -- Avatar
+  avatar_type TEXT CHECK (avatar_type IN ('emoji', 'icon', 'image')),
   avatar_value TEXT,
+
+  -- Feelings
   selected_feelings TEXT[],
-  mood_intensity INTEGER,
+
+  -- Mood
+  mood_intensity INTEGER CHECK (mood_intensity BETWEEN 0 AND 3),
+
+  -- Terms
   terms_accepted BOOLEAN DEFAULT FALSE,
   terms_accepted_at TIMESTAMPTZ,
+
+  -- Permissions
   notifications_enabled BOOLEAN DEFAULT FALSE,
   microphone_enabled BOOLEAN DEFAULT FALSE,
+
+  -- Completion
   completed_steps TEXT[],
   onboarding_completed BOOLEAN DEFAULT FALSE,
   onboarding_completed_at TIMESTAMPTZ,
+
+  -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(user_id)
 );
 
 -- Enable RLS
 ALTER TABLE user_onboarding ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can only access their own data
-CREATE POLICY "Users can manage own onboarding data"
-  ON user_onboarding
-  FOR ALL
+-- Users can only access their own data
+CREATE POLICY "Users manage own onboarding"
+  ON user_onboarding FOR ALL
   USING (auth.uid() = user_id);
+
+-- Auto-update timestamp
+CREATE TRIGGER update_onboarding_timestamp
+  BEFORE UPDATE ON user_onboarding
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 ```
 
-### 2. Uncomment Supabase Adapter
+### Step 2: Uncomment Supabase Adapter
 
-In `utils/onboardingStorage.ts`, uncomment the `SupabaseAdapter` class and update it with your Supabase client.
+In `utils/onboardingStorage.ts`, uncomment the `SupabaseAdapter` class.
 
-### 3. Switch Active Adapter
+### Step 3: Switch Active Adapter
 
-Change from:
 ```typescript
+// Change from:
 const adapter: StorageAdapter = new AsyncStorageAdapter();
-```
 
-To:
-```typescript
+// To:
 const adapter: StorageAdapter = new SupabaseAdapter(userId);
 ```
 
-### 4. Handle User ID
+### Step 4: Handle Authentication
 
-The Supabase adapter requires a user ID. You'll need to:
-- Pass the user ID when initializing the adapter
-- Or create a factory function that gets the current user from auth context
-
-Example factory pattern:
 ```typescript
-let cachedAdapter: StorageAdapter | null = null;
-
-async function getAdapter(): Promise<StorageAdapter> {
+// Create a factory function:
+async function getStorageAdapter(): Promise<StorageAdapter> {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
     return new SupabaseAdapter(user.id);
   }
 
-  // Fall back to local storage if not authenticated
+  // Fallback to local for unauthenticated users
   return new AsyncStorageAdapter();
 }
 ```
 
+---
+
 ## Best Practices
 
-1. **Always use `updateOnboardingData`** for partial updates - it merges with existing data
-2. **Use `setOnboardingData`** only when you want to replace all data
-3. **Check `onboardingCompleted`** before showing onboarding screens
-4. **Use timestamps** (`createdAt`, `updatedAt`) for debugging and analytics
-5. **Legacy support**: `saveAvatar` also writes to the old `userAvatar` key for backward compatibility
+### DO ✅
 
-## Testing
+- Use `updateOnboardingData()` for partial updates (it merges)
+- Save data BEFORE navigating to next screen
+- Check `onboardingCompleted` before showing onboarding
+- Use TypeScript for type-safe field access
+- Handle errors gracefully (functions won't throw)
 
-To reset onboarding state during development:
+### DON'T ❌
+
+- Don't use `setOnboardingData()` unless replacing ALL data
+- Don't access AsyncStorage directly - use the API
+- Don't forget to call `completeOnboarding()` at the end
+- Don't store sensitive data (passwords, tokens) here
+
+### Testing & Debugging
 
 ```typescript
-import { clearOnboardingData } from '@/utils/onboardingStorage';
-
 // In a debug menu or test:
+import { getOnboardingData, clearOnboardingData } from '@/utils/onboardingStorage';
+
+// View current data
+const data = await getOnboardingData();
+console.log('Onboarding Data:', JSON.stringify(data, null, 2));
+
+// Reset for testing
 await clearOnboardingData();
 ```
+
+---
+
+## Related Files
+
+- **Utility:** `utils/onboardingStorage.ts`
+- **Types:** Defined in `utils/onboardingStorage.ts`
+- **Screens:** `app/(onboarding-new)/*.tsx`
+- **Get Rolling Integration:** `app/(get-rolling)/avatar-analysis.tsx`
+
+---
+
+*Last Updated: February 2026*
