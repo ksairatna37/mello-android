@@ -32,6 +32,62 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { getOnboardingData, OnboardingData } from '@/utils/onboardingStorage';
+
+// ============================================================================
+// SAFE PERSONALIZATION - Reflect their words, never interpret
+// ============================================================================
+
+// Maps feeling IDs to user-friendly phrases (THEIR words, reflected back)
+const FEELING_PHRASES: Record<string, string> = {
+  anxious: 'feeling anxious',
+  stressed: 'feeling stressed',
+  lonely: 'feeling disconnected',
+  burnout: 'feeling worn out',
+  relationship: 'relationship stuff on your mind',
+  sleep: 'trouble sleeping',
+  talk: 'wanting someone to talk to',
+  exploring: 'exploring wellness',
+  other: 'going through something',
+};
+
+// Personalized subtitles based on primary feeling (safe, reflective)
+const FEELING_SUBTITLES: Record<string, string> = {
+  anxious: "You mentioned feeling anxious\nI'm here to listen",
+  stressed: "You mentioned feeling stressed\nTake your time with this",
+  lonely: "You mentioned feeling disconnected\nYou're not alone right now",
+  burnout: "You mentioned feeling worn out\nNo rush here",
+  relationship: "You mentioned relationship stuff\nThis stays between us",
+  sleep: "You mentioned trouble sleeping\nLet's talk about it",
+  talk: "You wanted someone to talk to\nI'm listening",
+  exploring: "You're exploring wellness\nI'm curious about you",
+  other: "You're going through something\nI'm here",
+  default: "Let's go a little deeper\nThis stays between us",
+  multiple: "You're carrying a few things\nOne step at a time",
+};
+
+// Personalized titles/questions based on primary feeling (gentle doors)
+const FEELING_TITLES: Record<string, string> = {
+  anxious: "What's been on your mind lately?",
+  stressed: "What's been weighing on you?",
+  lonely: "What's that been like for you?",
+  burnout: "What's been taking your energy?",
+  relationship: "What's been on your heart?",
+  sleep: "What keeps you up at night?",
+  talk: "What's on your mind?",
+  exploring: "What brought you here today?",
+  other: "What's been going on?",
+  default: "What's been weighing on your heart lately?",
+  multiple: "What feels most present right now?",
+};
+
+// Warmth modifiers based on mood intensity (adjusts tone, not content)
+const WARMTH_PHRASES: Record<number, string> = {
+  0: '', // Calm - no addition needed
+  1: '', // Finding rhythm - no addition needed
+  2: 'Take your time.', // Carrying a lot - gentle pace
+  3: "No rush. I'm here.", // Struggling - maximum gentleness
+};
 
 // Deep Indigo & Golden Aurora - Hope in Darkness
 const AURORA_GRADIENT = ['#F8F0E0', '#E8D0A8', '#B89058', '#584828', '#181020', '#D8B878'] as const;
@@ -78,6 +134,54 @@ export default function DiscomfortScreen() {
   const [isListening, setIsListening] = useState(false);
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
   const [liveTranscript, setLiveTranscript] = useState('');
+
+  // Personalization state
+  const [firstName, setFirstName] = useState<string>('');
+  const [primaryFeeling, setPrimaryFeeling] = useState<string>('default');
+  const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Load onboarding data for personalization
+  useEffect(() => {
+    const loadPersonalization = async () => {
+      const data = await getOnboardingData();
+
+      if (data.firstName) {
+        setFirstName(data.firstName);
+      }
+
+      if (data.moodIntensity !== undefined) {
+        setMoodIntensity(data.moodIntensity);
+      }
+
+      // Determine primary feeling
+      if (data.selectedFeelings && data.selectedFeelings.length > 0) {
+        if (data.selectedFeelings.length === 1) {
+          setPrimaryFeeling(data.selectedFeelings[0]);
+        } else {
+          // Multiple feelings - use 'multiple' variant
+          setPrimaryFeeling('multiple');
+        }
+      }
+    };
+
+    loadPersonalization();
+  }, []);
+
+  // Get personalized subtitle (safe - reflects their words)
+  const getPersonalizedSubtitle = (): string => {
+    const baseSubtitle = FEELING_SUBTITLES[primaryFeeling] || FEELING_SUBTITLES.default;
+    return baseSubtitle;
+  };
+
+  // Get personalized title (safe - opens a door, doesn't interpret)
+  const getPersonalizedTitle = (): string => {
+    return FEELING_TITLES[primaryFeeling] || FEELING_TITLES.default;
+  };
+
+  // Get warmth phrase based on mood intensity
+  const getWarmthPhrase = (): string => {
+    return WARMTH_PHRASES[moodIntensity] || '';
+  };
 
   const SILENCE_TIMEOUT_MS = 3000;
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -225,8 +329,19 @@ export default function DiscomfortScreen() {
   const showAIReply = ['show_reply', 'complete'].includes(flowState);
   const showNextButton = flowState === 'complete';
 
+  // AI response - safe, warm, never interprets
   const getAIResponse = () => {
-    return `That's such an honest answer.\n\nUnderstanding our patterns is the first step to changing them.\n\nI'm proud of you for being so real with me.`;
+    // Base response - acknowledges without interpreting
+    const baseResponse = "Thank you for sharing that with me.";
+
+    // Warmth varies by intensity (presence, not psychology)
+    if (moodIntensity >= 2) {
+      // Higher intensity - more gentle presence
+      return `${baseResponse}\n\nThat took courage to say.\n\nI'm here with you.`;
+    }
+
+    // Normal intensity - simple acknowledgment
+    return `${baseResponse}\n\nI hear you.\n\nLet's take the next step together.`;
   };
 
   return (
@@ -271,19 +386,23 @@ export default function DiscomfortScreen() {
 
             {showSubtitle && (
               <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                This one takes courage to answer{'\n'}No judgment, just honesty
+                {getPersonalizedSubtitle()}
               </Animated.Text>
             )}
 
             {showTitle && (
               <Animated.View style={titleAnimatedStyle}>
                 <AnimatedText
-                  text="What do you reach for when things feel too much?"
+                  text={getPersonalizedTitle()}
                   style={styles.title}
                   activeColor="#FFFFFF"
                   delayPerWord={120}
                   wordDuration={300}
                 />
+                {/* Warmth phrase for high intensity users */}
+                {moodIntensity >= 2 && (
+                  <Text style={styles.warmthPhrase}>{getWarmthPhrase()}</Text>
+                )}
               </Animated.View>
             )}
 
@@ -394,6 +513,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit-Bold',
     color: '#FFF',
     lineHeight: 40,
+  },
+
+  warmthPhrase: {
+    fontSize: 17,
+    fontFamily: 'Outfit-Regular',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 12,
   },
 
   liveTranscript: {
