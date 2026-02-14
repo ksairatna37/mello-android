@@ -11,8 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   ScrollView,
   Image,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -20,9 +23,14 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
+  Easing,
   FadeIn,
   FadeOut,
+  runOnJS,
 } from 'react-native-reanimated';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -92,6 +100,9 @@ const CURRENT_STEP = 2;
 // Inline avatar size (slightly smaller than font-size for clean inline fit)
 const INLINE_AVATAR_SIZE = 32;
 
+// Zoomed avatar size (Instagram-style large preview)
+const ZOOMED_AVATAR_SIZE = SCREEN_WIDTH * 0.7;
+
 type AvatarData = {
   type: 'emoji' | 'icon' | 'image' | null;
   value: string | null;
@@ -111,6 +122,11 @@ export default function AvatarAnalysisScreen() {
   // Personalization state
   const [firstName, setFirstName] = useState<string | null>(null);
   const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Avatar zoom modal state
+  const [showZoomModal, setShowZoomModal] = useState(false);
+  const zoomScale = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
 
   // Load avatar and personalization from storage
   useEffect(() => {
@@ -284,6 +300,35 @@ export default function AvatarAnalysisScreen() {
   const showAIReply = ['show_reply', 'complete'].includes(flowState);
   const showNextButton = flowState === 'complete';
 
+  // Avatar zoom handlers
+  const openZoomModal = () => {
+    setShowZoomModal(true);
+    backdropOpacity.value = withTiming(1, { duration: 200 });
+    zoomScale.value = withSpring(1, {
+      damping: 15,
+      stiffness: 150,
+    });
+  };
+
+  const closeZoomModal = () => {
+    backdropOpacity.value = withTiming(0, { duration: 200 });
+    zoomScale.value = withTiming(0, {
+      duration: 200,
+      easing: Easing.in(Easing.ease),
+    }, () => {
+      runOnJS(setShowZoomModal)(false);
+    });
+  };
+
+  // Animated styles for zoom modal
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+
+  const zoomedAvatarAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: zoomScale.value }],
+  }));
+
   // Get personalized subtitle
   const getSubtitle = () => {
     const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
@@ -297,12 +342,16 @@ export default function AvatarAnalysisScreen() {
     return `${namePrefix}beautiful.\n\nThank you for sharing that with me.\n\nI appreciate you letting me see a little more of you.`;
   };
 
-  // Render inline avatar for the title - uses View inside Text for true inline flow
+  // Render inline avatar for the title - tappable to zoom
   const renderInlineAvatar = () => {
     if (!avatar.value) return null;
 
     return (
-      <View style={styles.inlineAvatarContainer}>
+      <View
+        style={styles.inlineAvatarContainer}
+        onStartShouldSetResponder={() => true}
+        onResponderRelease={openZoomModal}
+      >
         {avatar.type === 'emoji' && (
           <Text style={styles.inlineAvatarEmoji}>{avatar.value}</Text>
         )}
@@ -313,6 +362,25 @@ export default function AvatarAnalysisScreen() {
           <Image source={{ uri: avatar.value }} style={styles.inlineAvatarImage} />
         )}
       </View>
+    );
+  };
+
+  // Render zoomed avatar content
+  const renderZoomedAvatar = () => {
+    if (!avatar.value) return null;
+
+    return (
+      <>
+        {avatar.type === 'emoji' && (
+          <Text style={styles.zoomedAvatarEmoji}>{avatar.value}</Text>
+        )}
+        {avatar.type === 'icon' && (
+          <Ionicons name={avatar.value as any} size={ZOOMED_AVATAR_SIZE * 0.6} color="#FFFFFF" />
+        )}
+        {avatar.type === 'image' && (
+          <Image source={{ uri: avatar.value }} style={styles.zoomedAvatarImage} />
+        )}
+      </>
     );
   };
 
@@ -438,6 +506,27 @@ export default function AvatarAnalysisScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Avatar Zoom Modal - Instagram style */}
+      <Modal
+        visible={showZoomModal}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={closeZoomModal}
+      >
+        <TouchableWithoutFeedback onPress={closeZoomModal}>
+          <View style={styles.zoomModalContainer}>
+            {/* Backdrop */}
+            <Animated.View style={[styles.zoomBackdrop, backdropAnimatedStyle]} />
+
+            {/* Zoomed Avatar */}
+            <Animated.View style={[styles.zoomedAvatarContainer, zoomedAvatarAnimatedStyle]}>
+              {renderZoomedAvatar()}
+            </Animated.View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -541,5 +630,39 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Zoom Modal styles (Instagram-style)
+  zoomModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  zoomedAvatarContainer: {
+    width: ZOOMED_AVATAR_SIZE,
+    height: ZOOMED_AVATAR_SIZE,
+    borderRadius: ZOOMED_AVATAR_SIZE / 2,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Subtle shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 20,
+  },
+  zoomedAvatarEmoji: {
+    fontSize: ZOOMED_AVATAR_SIZE * 0.6,
+  },
+  zoomedAvatarImage: {
+    width: ZOOMED_AVATAR_SIZE,
+    height: ZOOMED_AVATAR_SIZE,
+    borderRadius: ZOOMED_AVATAR_SIZE / 2,
   },
 });
