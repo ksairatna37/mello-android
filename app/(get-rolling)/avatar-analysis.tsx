@@ -519,7 +519,7 @@ export default function AvatarAnalysisScreen() {
           <View style={styles.zoomModalContainer}>
             {/* Blur Backdrop */}
             <Animated.View style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}>
-              <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+              <BlurView intensity={150} tint="dark" style={StyleSheet.absoluteFill} />
             </Animated.View>
 
             {/* Zoomed Avatar */}
