@@ -23,7 +23,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   Easing,
   FadeIn,
   FadeOut,
@@ -303,10 +302,10 @@ export default function AvatarAnalysisScreen() {
   // Avatar zoom handlers
   const openZoomModal = () => {
     setShowZoomModal(true);
-    backdropOpacity.value = withTiming(1, { duration: 200 });
-    zoomScale.value = withSpring(1, {
-      damping: 15,
-      stiffness: 150,
+    backdropOpacity.value = withTiming(1, { duration: 250 });
+    zoomScale.value = withTiming(1, {
+      duration: 250,
+      easing: Easing.out(Easing.ease),
     });
   };
 
