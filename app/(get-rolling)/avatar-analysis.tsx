@@ -89,8 +89,8 @@ type FlowState =
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 2;
 
-// Inline avatar size (matches title line-height)
-const INLINE_AVATAR_SIZE = 40;
+// Inline avatar size (slightly smaller than font-size for clean inline fit)
+const INLINE_AVATAR_SIZE = 32;
 
 type AvatarData = {
   type: 'emoji' | 'icon' | 'image' | null;
@@ -297,7 +297,7 @@ export default function AvatarAnalysisScreen() {
     return `${namePrefix}beautiful.\n\nThank you for sharing that with me.\n\nI appreciate you letting me see a little more of you.`;
   };
 
-  // Render inline avatar for the title
+  // Render inline avatar for the title - uses View inside Text for true inline flow
   const renderInlineAvatar = () => {
     if (!avatar.value) return null;
 
@@ -307,9 +307,7 @@ export default function AvatarAnalysisScreen() {
           <Text style={styles.inlineAvatarEmoji}>{avatar.value}</Text>
         )}
         {avatar.type === 'icon' && (
-          <View style={styles.inlineAvatarIcon}>
-            <Ionicons name={avatar.value as any} size={24} color="#FFFFFF" />
-          </View>
+          <Ionicons name={avatar.value as any} size={22} color="#FFFFFF" />
         )}
         {avatar.type === 'image' && (
           <Image source={{ uri: avatar.value }} style={styles.inlineAvatarImage} />
@@ -365,10 +363,10 @@ export default function AvatarAnalysisScreen() {
             )}
 
             {showTitle && (
-              <Animated.View style={[titleAnimatedStyle, styles.titleContainer]}>
-                <Text style={styles.title}>What made you pick that </Text>
-                {renderInlineAvatar()}
-                <Text style={styles.title}> picture?</Text>
+              <Animated.View style={titleAnimatedStyle}>
+                <Text style={styles.title}>
+                  What made you pick that {renderInlineAvatar()} picture?
+                </Text>
               </Animated.View>
             )}
 
@@ -474,20 +472,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  titleContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-  },
-
   title: {
     fontSize: 32,
     fontFamily: 'Outfit-Bold',
     color: '#FFF',
-    lineHeight: 40,
+    lineHeight: 42,
   },
 
-  // Inline avatar styles (size matches line-height of 40)
+  // Inline avatar styles - sized to fit within text line
   inlineAvatarContainer: {
     width: INLINE_AVATAR_SIZE,
     height: INLINE_AVATAR_SIZE,
@@ -496,17 +488,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 4,
+    // Vertical alignment for inline View in Text
+    transform: [{ translateY: 6 }],
   },
   inlineAvatarEmoji: {
-    fontSize: 24,
-    lineHeight: 28,
-  },
-  inlineAvatarIcon: {
-    width: INLINE_AVATAR_SIZE,
-    height: INLINE_AVATAR_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: 20,
+    lineHeight: 24,
   },
   inlineAvatarImage: {
     width: INLINE_AVATAR_SIZE,
