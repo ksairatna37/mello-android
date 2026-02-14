@@ -27,6 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
+import { updateOnboardingData } from '@/utils/onboardingStorage';
 
 const CURRENT_STEP = 5;
 
@@ -115,9 +116,10 @@ export default function FeelingsSelectScreen() {
     router.back();
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (canContinue) {
-      // TODO: Save selected feelings to user profile
+      // Save selected feelings to storage
+      await updateOnboardingData({ selectedFeelings });
       router.push({
         pathname: '/(onboarding-new)/mood-weight',
         params: { firstName },

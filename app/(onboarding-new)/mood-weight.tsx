@@ -33,6 +33,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import CrisisCheckSheet from '@/components/onboarding/CrisisCheckSheet';
+import { updateOnboardingData } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CURRENT_STEP = 6;
@@ -199,7 +200,9 @@ export default function MoodWeightScreen() {
     navigateToNext();
   };
 
-  const navigateToNext = () => {
+  const navigateToNext = async () => {
+    // Save mood intensity to storage
+    await updateOnboardingData({ moodIntensity: currentStage });
     router.push({
       pathname: '/(onboarding-new)/terms-trust',
       params: { firstName, moodWeight: MOOD_STAGES[currentStage].id },

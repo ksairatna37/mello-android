@@ -23,6 +23,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { saveAvatar } from '@/utils/onboardingStorage';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -275,6 +276,7 @@ export default function ProfilePictureScreen() {
       if (!result.canceled && result.assets[0]) {
         setAvatarType('image');
         setAvatarValue(result.assets[0].uri);
+        saveAvatar('image', result.assets[0].uri);
         hideSheet();
       }
     } else if (option === 'image') {
@@ -296,6 +298,7 @@ export default function ProfilePictureScreen() {
       if (!result.canceled && result.assets[0]) {
         setAvatarType('image');
         setAvatarValue(result.assets[0].uri);
+        saveAvatar('image', result.assets[0].uri);
         hideSheet();
       }
     }
@@ -304,12 +307,14 @@ export default function ProfilePictureScreen() {
   const handleSelectEmoji = (emoji: string) => {
     setAvatarType('emoji');
     setAvatarValue(emoji);
+    saveAvatar('emoji', emoji);
     hideSheet();
   };
 
   const handleSelectIcon = (iconName: string) => {
     setAvatarType('icon');
     setAvatarValue(iconName);
+    saveAvatar('icon', iconName);
     hideSheet();
   };
 

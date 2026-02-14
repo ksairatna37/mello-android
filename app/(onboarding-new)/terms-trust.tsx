@@ -34,6 +34,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
+import { updateOnboardingData } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CURRENT_STEP = 7;
@@ -203,8 +204,13 @@ export default function TermsTrustScreen() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (canContinue) {
+      // Save terms acceptance to storage
+      await updateOnboardingData({
+        termsAccepted: true,
+        termsAcceptedAt: new Date().toISOString(),
+      });
       router.push('/(onboarding-new)/permissions' as any);
     }
   };

@@ -12,7 +12,9 @@ import {
   Platform,
   TouchableOpacity,
   ScrollView,
+  Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
@@ -70,6 +72,14 @@ type FlowState =
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 2;
 
+// Inline avatar size (matches title line-height)
+const INLINE_AVATAR_SIZE = 40;
+
+type AvatarData = {
+  type: 'emoji' | 'icon' | 'image' | null;
+  value: string | null;
+};
+
 export default function AvatarAnalysisScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -79,6 +89,23 @@ export default function AvatarAnalysisScreen() {
   const [isListening, setIsListening] = useState(false);
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [avatar, setAvatar] = useState<AvatarData>({ type: null, value: null });
+
+  // Load avatar from AsyncStorage
+  useEffect(() => {
+    const loadAvatar = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('userAvatar');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setAvatar({ type: parsed.type, value: parsed.value });
+        }
+      } catch (e) {
+        console.log('Failed to load avatar:', e);
+      }
+    };
+    loadAvatar();
+  }, []);
 
   // Debounce timer for auto-submit (3 seconds of silence)
   const SILENCE_TIMEOUT_MS = 3000;
@@ -233,6 +260,27 @@ export default function AvatarAnalysisScreen() {
     return `That's beautiful.\n\nThe way we present ourselves says so much about who we are inside.\n\nThank you for letting me see a little more of you.`;
   };
 
+  // Render inline avatar for the title
+  const renderInlineAvatar = () => {
+    if (!avatar.value) return null;
+
+    return (
+      <View style={styles.inlineAvatarContainer}>
+        {avatar.type === 'emoji' && (
+          <Text style={styles.inlineAvatarEmoji}>{avatar.value}</Text>
+        )}
+        {avatar.type === 'icon' && (
+          <View style={styles.inlineAvatarIcon}>
+            <Ionicons name={avatar.value as any} size={24} color="#FFFFFF" />
+          </View>
+        )}
+        {avatar.type === 'image' && (
+          <Image source={{ uri: avatar.value }} style={styles.inlineAvatarImage} />
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <AuroraGradient
@@ -280,14 +328,10 @@ export default function AvatarAnalysisScreen() {
             )}
 
             {showTitle && (
-              <Animated.View style={titleAnimatedStyle}>
-                <AnimatedText
-                  text="What made you pick that picture?"
-                  style={styles.title}
-                  activeColor="#FFFFFF"
-                  delayPerWord={120}
-                  wordDuration={300}
-                />
+              <Animated.View style={[titleAnimatedStyle, styles.titleContainer]}>
+                <Text style={styles.title}>What made you pick that </Text>
+                {renderInlineAvatar()}
+                <Text style={styles.title}> picture?</Text>
               </Animated.View>
             )}
 
@@ -393,11 +437,44 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
+  titleContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+
   title: {
     fontSize: 32,
     fontFamily: 'Outfit-Bold',
     color: '#FFF',
     lineHeight: 40,
+  },
+
+  // Inline avatar styles (size matches line-height of 40)
+  inlineAvatarContainer: {
+    width: INLINE_AVATAR_SIZE,
+    height: INLINE_AVATAR_SIZE,
+    borderRadius: INLINE_AVATAR_SIZE / 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  inlineAvatarEmoji: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  inlineAvatarIcon: {
+    width: INLINE_AVATAR_SIZE,
+    height: INLINE_AVATAR_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineAvatarImage: {
+    width: INLINE_AVATAR_SIZE,
+    height: INLINE_AVATAR_SIZE,
+    borderRadius: INLINE_AVATAR_SIZE / 2,
   },
 
   liveTranscript: {

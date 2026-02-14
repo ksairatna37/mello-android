@@ -33,6 +33,7 @@ import Animated, {
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
+import { updateOnboardingData, completeOnboarding } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CURRENT_STEP = 8;
@@ -137,8 +138,13 @@ export default function PermissionsScreen() {
     router.back();
   };
 
-  const handleContinue = () => {
-    // Navigate to personalizing screen
+  const handleContinue = async () => {
+    // Save permissions and complete onboarding
+    await updateOnboardingData({
+      notificationsEnabled,
+      microphoneEnabled,
+    });
+    await completeOnboarding();
     router.push('/(onboarding-new)/personalizing' as any);
   };
 

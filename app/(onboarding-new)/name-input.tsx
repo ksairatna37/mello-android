@@ -26,6 +26,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
+import { updateOnboardingData } from '@/utils/onboardingStorage';
 
 const CURRENT_STEP = 3;
 
@@ -116,9 +117,13 @@ export default function NameInputScreen() {
     router.back();
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (canContinue) {
-      // TODO: Save name to user profile
+      // Save name to storage
+      await updateOnboardingData({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
       router.push({
         pathname: '/(onboarding-new)/profile-picture',
         params: { firstName: firstName.trim(), lastName: lastName.trim() },
