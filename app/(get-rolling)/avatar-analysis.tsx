@@ -517,9 +517,14 @@ export default function AvatarAnalysisScreen() {
       >
         <TouchableWithoutFeedback onPress={closeZoomModal}>
           <View style={styles.zoomModalContainer}>
-            {/* Blur Backdrop */}
-            <Animated.View style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}>
-              <BlurView intensity={150} tint="dark" style={StyleSheet.absoluteFill} />
+            {/* Blur Backdrop with dark fallback for Android */}
+            <Animated.View style={[StyleSheet.absoluteFill, styles.blurBackdrop, backdropAnimatedStyle]}>
+              <BlurView
+                intensity={100}
+                tint="dark"
+                experimentalBlurMethod="dimezisBlurView"
+                style={StyleSheet.absoluteFill}
+              />
             </Animated.View>
 
             {/* Zoomed Avatar */}
@@ -639,6 +644,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  blurBackdrop: {
+    // Dark fallback for Android where BlurView may not work
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
   zoomedAvatarContainer: {
     width: ZOOMED_AVATAR_SIZE,
