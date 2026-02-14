@@ -44,6 +44,46 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
+import { getOnboardingData } from '@/utils/onboardingStorage';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAFE PERSONALIZATION PHILOSOPHY
+// ═══════════════════════════════════════════════════════════════════════════
+// - Reflect their words, never interpret
+// - Adjust warmth based on moodIntensity
+// - Never claim meaning or diagnose
+// - "Presence over psychology"
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Greeting variations based on primary feeling - warm without interpreting
+const FEELING_GREETINGS: Record<string, string> = {
+  anxious: "I'm here with you",
+  stressed: "I'm glad you're taking this moment",
+  lonely: "You're not alone right now",
+  burnout: "I'm glad you're here",
+  relationship: "I'm here to listen",
+  sleep: "I'm here with you",
+  talk: "I'm here to listen",
+  exploring: "I'm excited to meet you",
+  other: "I'm so glad you're here",
+};
+
+// Bottom text variations - presence, not psychology
+const FEELING_BOTTOM_TEXT: Record<string, string> = {
+  anxious: "I'm keeping what you shared in mind.\nLet's take this gently...",
+  stressed: "I'm keeping what you shared in mind.\nNo rush here...",
+  lonely: "I'm keeping what you shared in mind.\nLet's get to know each other...",
+  burnout: "I'm keeping what you shared in mind.\nLet's take this at your pace...",
+  default: "I'm keeping what you shared in mind.\nLet's learn a little more about you...",
+};
+
+// Warmth phrases for high intensity - extra gentle
+const WARMTH_PHRASES: Record<number, string> = {
+  0: '', // Calm
+  1: '', // Finding rhythm
+  2: ' Take your time.', // Carrying a lot
+  3: " There's no rush.", // Struggling
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -70,7 +110,29 @@ export default function PersonalizingScreen() {
   const lottieRef = useRef<LottieView>(null);
   const [showContent, setShowContent] = useState(false);
 
-  const firstName = params.firstName || 'there';
+  // Personalization state
+  const [firstName, setFirstName] = useState<string>(params.firstName || 'there');
+  const [primaryFeeling, setPrimaryFeeling] = useState<string | null>(null);
+  const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Load personalization data from storage
+  useEffect(() => {
+    const loadPersonalization = async () => {
+      try {
+        const data = await getOnboardingData();
+        if (data.firstName) setFirstName(data.firstName);
+        if (data.selectedFeelings?.length) {
+          setPrimaryFeeling(data.selectedFeelings[0]);
+        }
+        if (typeof data.moodIntensity === 'number') {
+          setMoodIntensity(data.moodIntensity);
+        }
+      } catch (e) {
+        console.log('Failed to load personalization:', e);
+      }
+    };
+    loadPersonalization();
+  }, []);
 
   // Logo starts at P2 (center), will animate to P1 (up)
   // translateY starts at 0, will go to -SLIDE_DISTANCE
@@ -184,6 +246,23 @@ export default function PersonalizingScreen() {
     transform: [{ translateY: buttonTranslateY.value }],
   }));
 
+  // Get personalized greeting - warm without interpreting
+  const getGreeting = () => {
+    const greeting = primaryFeeling && FEELING_GREETINGS[primaryFeeling]
+      ? FEELING_GREETINGS[primaryFeeling]
+      : "I'm so glad you're here";
+    return `Hi ${firstName}, ${greeting}.`;
+  };
+
+  // Get personalized bottom text - presence, not psychology
+  const getBottomText = () => {
+    const base = primaryFeeling && FEELING_BOTTOM_TEXT[primaryFeeling]
+      ? FEELING_BOTTOM_TEXT[primaryFeeling]
+      : FEELING_BOTTOM_TEXT.default;
+    const warmth = WARMTH_PHRASES[moodIntensity] || '';
+    return base + warmth;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -210,7 +289,7 @@ export default function PersonalizingScreen() {
         {showContent && (
           <Animated.View style={[styles.subtitleContainer, subtitleStyle]}>
             <Text style={styles.message}>
-              Hi {firstName}, I'm so glad you're here.
+              {getGreeting()}
             </Text>
           </Animated.View>
         )}
@@ -219,7 +298,7 @@ export default function PersonalizingScreen() {
         {showContent && (
           <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 24 }]}>
             <Animated.Text style={[styles.bottomText, bottomTextStyle]}>
-              I'm keeping what you shared in mind.{'\n'}Let's learn a little more about you..
+              {getBottomText()}
             </Animated.Text>
 
             <Animated.View style={buttonStyle}>
