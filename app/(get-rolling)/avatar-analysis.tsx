@@ -28,6 +28,7 @@ import Animated, {
   FadeOut,
   runOnJS,
 } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -516,8 +517,10 @@ export default function AvatarAnalysisScreen() {
       >
         <TouchableWithoutFeedback onPress={closeZoomModal}>
           <View style={styles.zoomModalContainer}>
-            {/* Backdrop */}
-            <Animated.View style={[styles.zoomBackdrop, backdropAnimatedStyle]} />
+            {/* Blur Backdrop */}
+            <Animated.View style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}>
+              <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            </Animated.View>
 
             {/* Zoomed Avatar */}
             <Animated.View style={[styles.zoomedAvatarContainer, zoomedAvatarAnimatedStyle]}>
@@ -636,10 +639,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  zoomBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
   },
   zoomedAvatarContainer: {
     width: ZOOMED_AVATAR_SIZE,
