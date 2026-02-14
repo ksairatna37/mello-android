@@ -27,6 +27,37 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { getOnboardingData } from '@/utils/onboardingStorage';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAFE PERSONALIZATION PHILOSOPHY
+// ═══════════════════════════════════════════════════════════════════════════
+// - Reflect their words, never interpret
+// - Adjust warmth based on moodIntensity
+// - Never claim meaning or diagnose
+// - "Presence over psychology"
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Subtitles that reflect without interpreting - based on primary feeling
+const FEELING_SUBTITLES: Record<string, string> = {
+  anxious: "You mentioned feeling anxious\nI heard you",
+  stressed: "You mentioned feeling stressed\nI've been listening",
+  lonely: "You mentioned feeling disconnected\nI'm here with you",
+  burnout: "You mentioned feeling burnt out\nI see your tiredness",
+  relationship: "You mentioned relationship struggles\nI heard you",
+  sleep: "You mentioned trouble sleeping\nI've been listening",
+  talk: "You mentioned wanting to talk\nI'm here",
+  exploring: "You're exploring wellness\nI've been listening",
+  other: "Thank you for sharing with me\nI've been listening",
+};
+
+// Warmth phrases for high intensity - presence, not interpretation
+const WARMTH_PHRASES: Record<number, string> = {
+  0: '', // Calm - no extra warmth needed
+  1: '', // Finding rhythm
+  2: 'Take all the time you need.', // Carrying a lot
+  3: "You've already done so much by being here.", // Struggling
+};
 
 // Soft Lavender/Periwinkle Aurora - Wisdom & Reflection
 const AURORA_GRADIENT = ['#F0E8F8', '#D8C8E8', '#A888C8', '#684888', '#281838', '#C8A8D8'] as const;
@@ -68,6 +99,30 @@ export default function InsightScreen() {
 
   const [flowState, setFlowState] = useState<FlowState>('typing_indicator');
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
+
+  // Personalization state
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [primaryFeeling, setPrimaryFeeling] = useState<string | null>(null);
+  const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Load personalization data
+  useEffect(() => {
+    const loadPersonalization = async () => {
+      try {
+        const data = await getOnboardingData();
+        if (data.firstName) setFirstName(data.firstName);
+        if (data.selectedFeelings?.length) {
+          setPrimaryFeeling(data.selectedFeelings[0]);
+        }
+        if (typeof data.moodIntensity === 'number') {
+          setMoodIntensity(data.moodIntensity);
+        }
+      } catch (e) {
+        console.log('Failed to load personalization:', e);
+      }
+    };
+    loadPersonalization();
+  }, []);
 
   const indicatorOpacity = useSharedValue(1);
   const indicatorHeight = useSharedValue(24);
@@ -142,8 +197,30 @@ export default function InsightScreen() {
   const showAIReply = ['show_reply', 'complete'].includes(flowState);
   const showCompleteButton = flowState === 'complete';
 
+  // Get personalized subtitle - reflect their feeling without interpreting
+  const getSubtitle = () => {
+    const base = primaryFeeling && FEELING_SUBTITLES[primaryFeeling]
+      ? FEELING_SUBTITLES[primaryFeeling]
+      : "Thank you for sharing with me\nI've been listening";
+    return base;
+  };
+
+  // Get the insight message - warm presence, not interpretation
   const getInsightMessage = () => {
-    return `You're not broken, you're becoming.\n\nEvery answer you shared shows someone ready to grow, ready to heal, ready to be seen.\n\nI'm honored to walk this path with you.`;
+    const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
+    const nameGreeting = firstName ? `${firstName}, ` : '';
+
+    // Base message - affirming without diagnosing
+    let message = `${nameGreeting}you're not broken, you're becoming.\n\nEvery answer you shared shows someone ready to grow.`;
+
+    // Add warmth phrase for high intensity
+    if (warmthPhrase) {
+      message += `\n\n${warmthPhrase}`;
+    }
+
+    message += `\n\nI'm honored to walk this path with you.`;
+
+    return message;
   };
 
   return (
@@ -188,7 +265,7 @@ export default function InsightScreen() {
 
             {showSubtitle && (
               <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                I've been listening carefully{'\n'}Here's what I see in you
+                {getSubtitle()}
               </Animated.Text>
             )}
 

@@ -33,6 +33,23 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { getOnboardingData } from '@/utils/onboardingStorage';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAFE PERSONALIZATION PHILOSOPHY
+// ═══════════════════════════════════════════════════════════════════════════
+// - Reflect their words, never interpret
+// - Use firstName for warm greeting if available
+// - Adjust pace based on moodIntensity (warmth, not psychology)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Warmth phrases for high intensity users
+const WARMTH_PHRASES: Record<number, string> = {
+  0: '', // Calm
+  1: '', // Finding rhythm
+  2: 'Take your time.', // Carrying a lot
+  3: "There's no rush here.", // Struggling
+};
 
 type FlowState =
   | 'typing_indicator'
@@ -57,6 +74,26 @@ export default function AgeScreen() {
   const [isListening, setIsListening] = useState(false);
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
   const [liveTranscript, setLiveTranscript] = useState('');
+
+  // Personalization state
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Load personalization data
+  useEffect(() => {
+    const loadPersonalization = async () => {
+      try {
+        const data = await getOnboardingData();
+        if (data.firstName) setFirstName(data.firstName);
+        if (typeof data.moodIntensity === 'number') {
+          setMoodIntensity(data.moodIntensity);
+        }
+      } catch (e) {
+        console.log('Failed to load personalization:', e);
+      }
+    };
+    loadPersonalization();
+  }, []);
 
   // Debounce timer for auto-submit (3 seconds of silence)
   const SILENCE_TIMEOUT_MS = 3000;
@@ -203,6 +240,14 @@ export default function AgeScreen() {
   const handleNext = () => router.push('/(get-rolling)/avatar-analysis');
   const handleClose = () => router.replace('/(main)/chat');
 
+  // Get personalized subtitle
+  const getSubtitle = () => {
+    const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
+    const nameGreeting = firstName ? `Hi ${firstName}. ` : '';
+    const base = `${nameGreeting}This helps me understand\nwhere you are in life`;
+    return warmthPhrase ? `${base}\n${warmthPhrase}` : base;
+  };
+
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
     height: indicatorHeight.value,
@@ -267,7 +312,7 @@ export default function AgeScreen() {
 
             {showSubtitle && (
               <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                This helps me understand{'\n'}where you are in life
+                {getSubtitle()}
               </Animated.Text>
             )}
 

@@ -57,6 +57,23 @@ const AURORA_BLOBS = [
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { getOnboardingData } from '@/utils/onboardingStorage';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAFE PERSONALIZATION PHILOSOPHY
+// ═══════════════════════════════════════════════════════════════════════════
+// - Reflect their words, never interpret
+// - Use firstName for warm greeting if available
+// - Adjust pace based on moodIntensity (warmth, not psychology)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Warmth phrases for high intensity users - presence, not interpretation
+const WARMTH_PHRASES: Record<number, string> = {
+  0: '', // Calm
+  1: '', // Finding rhythm
+  2: 'Take your time.', // Carrying a lot
+  3: "No pressure. I'm just curious.", // Struggling
+};
 
 type FlowState =
   | 'typing_indicator'
@@ -91,20 +108,32 @@ export default function AvatarAnalysisScreen() {
   const [liveTranscript, setLiveTranscript] = useState('');
   const [avatar, setAvatar] = useState<AvatarData>({ type: null, value: null });
 
-  // Load avatar from AsyncStorage
+  // Personalization state
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Load avatar and personalization from storage
   useEffect(() => {
-    const loadAvatar = async () => {
+    const loadData = async () => {
       try {
+        // Load avatar from legacy key for backwards compatibility
         const stored = await AsyncStorage.getItem('userAvatar');
         if (stored) {
           const parsed = JSON.parse(stored);
           setAvatar({ type: parsed.type, value: parsed.value });
         }
+
+        // Load personalization data
+        const data = await getOnboardingData();
+        if (data.firstName) setFirstName(data.firstName);
+        if (typeof data.moodIntensity === 'number') {
+          setMoodIntensity(data.moodIntensity);
+        }
       } catch (e) {
-        console.log('Failed to load avatar:', e);
+        console.log('Failed to load data:', e);
       }
     };
-    loadAvatar();
+    loadData();
   }, []);
 
   // Debounce timer for auto-submit (3 seconds of silence)
@@ -255,9 +284,17 @@ export default function AvatarAnalysisScreen() {
   const showAIReply = ['show_reply', 'complete'].includes(flowState);
   const showNextButton = flowState === 'complete';
 
-  // Generate contextual AI response based on user's answer
+  // Get personalized subtitle
+  const getSubtitle = () => {
+    const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
+    const base = "I noticed you chose an avatar\nI'd love to know more";
+    return warmthPhrase ? `${base}\n${warmthPhrase}` : base;
+  };
+
+  // Generate contextual AI response - warm without interpreting
   const getAIResponse = () => {
-    return `That's beautiful.\n\nThe way we present ourselves says so much about who we are inside.\n\nThank you for letting me see a little more of you.`;
+    const namePrefix = firstName ? `${firstName}, that's ` : "That's ";
+    return `${namePrefix}beautiful.\n\nThank you for sharing that with me.\n\nI appreciate you letting me see a little more of you.`;
   };
 
   // Render inline avatar for the title
@@ -323,7 +360,7 @@ export default function AvatarAnalysisScreen() {
 
             {showSubtitle && (
               <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                I noticed you chose an avatar{'\n'}I'd love to know more
+                {getSubtitle()}
               </Animated.Text>
             )}
 
