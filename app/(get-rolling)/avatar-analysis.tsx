@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import SelectionCard from '@/components/get-rolling/SelectionCard';
+import ScrollFadeEdges from '@/components/get-rolling/ScrollFadeEdges';
 import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
 
 // Purple/violet aurora - VERSION 4 (Ethereal Dream)
@@ -299,48 +300,51 @@ export default function AvatarAnalysisScreen() {
           </Text>
         </View>
 
-        {/* Conversation Area */}
-        <ScrollView
-          style={styles.conversationArea}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
-          <Animated.View style={indicatorAnimatedStyle}>
-            {showTypingIndicator && <TypingIndicator />}
-          </Animated.View>
-
-          {showSubtitle && (
-            <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-              {getSubtitle()}
-            </Animated.Text>
-          )}
-
-          {showTitle && (
-            <Animated.View style={titleAnimatedStyle}>
-              <Text style={styles.title}>
-                What made you pick that {renderInlineAvatar()} picture?
-              </Text>
+        {/* Conversation Area with Fade Edges */}
+        <View style={styles.scrollContainer}>
+          <ScrollFadeEdges topFadeHeight={30} bottomFadeHeight={100} />
+          <ScrollView
+            style={styles.conversationArea}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 60, paddingTop: 20 }}
+          >
+            <Animated.View style={indicatorAnimatedStyle}>
+              {showTypingIndicator && <TypingIndicator />}
             </Animated.View>
-          )}
 
-          {/* Selection Options */}
-          {showOptions && (
-            <Animated.View
-              style={styles.optionsContainer}
-              entering={FadeIn.duration(400)}
-            >
-              {AVATAR_OPTIONS.map((option) => (
-                <SelectionCard
-                  key={option.id}
-                  label={option.label}
-                  isSelected={selectedOption === option.id}
-                  onPress={() => handleSelectOption(option.id)}
+            {showSubtitle && (
+              <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
+                {getSubtitle()}
+              </Animated.Text>
+            )}
+
+            {showTitle && (
+              <Animated.View style={titleAnimatedStyle}>
+                <Text style={styles.title}>
+                  What made you pick that {renderInlineAvatar()} picture?
+                </Text>
+              </Animated.View>
+            )}
+
+            {/* Selection Options */}
+            {showOptions && (
+              <Animated.View
+                style={styles.optionsContainer}
+                entering={FadeIn.duration(400)}
+              >
+                {AVATAR_OPTIONS.map((option) => (
+                  <SelectionCard
+                    key={option.id}
+                    label={option.label}
+                    isSelected={selectedOption === option.id}
+                    onPress={() => handleSelectOption(option.id)}
                   accentColor="#4A2868"
                 />
               ))}
             </Animated.View>
           )}
-        </ScrollView>
+          </ScrollView>
+        </View>
       </View>
 
       {/* Avatar Zoom Modal */}
@@ -392,7 +396,11 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 17, fontFamily: 'Outfit-SemiBold', color: '#FFF', minWidth: 60, textAlign: 'right' },
   stepTextLight: { fontFamily: 'Outfit-Regular', color: 'rgba(255,255,255,0.7)' },
 
-  conversationArea: { paddingTop: 20 },
+  scrollContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  conversationArea: { flex: 1 },
 
   subtitle: {
     fontSize: 17,
