@@ -1,11 +1,12 @@
 /**
  * ScrollFadeEdges Component
- * Adds subtle gradient fade effects at top and bottom of scroll containers
+ * Adds transparent blur effects at top and bottom of scroll containers
  * Creates smooth visual transition when content is scrollable
  */
 
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface ScrollFadeEdgesProps {
@@ -23,22 +24,38 @@ export const ScrollFadeEdges = ({
 }: ScrollFadeEdgesProps) => {
   return (
     <>
-      {/* Top fade - subtle, extends full width */}
+      {/* Top fade - transparent blur */}
       {showTop && (
-        <LinearGradient
-          colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0)']}
-          style={[styles.topFade, { height: topFadeHeight }]}
-          pointerEvents="none"
-        />
+        <View style={[styles.topFade, { height: topFadeHeight }]} pointerEvents="none">
+          <BlurView
+            intensity={25}
+            tint="default"
+            experimentalBlurMethod="dimezisBlurView"
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Gradient mask to fade out the blur */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.08)', 'transparent']}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       )}
 
-      {/* Bottom fade - subtle, extends full width */}
+      {/* Bottom fade - transparent blur */}
       {showBottom && (
-        <LinearGradient
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.35)']}
-          style={[styles.bottomFade, { height: bottomFadeHeight }]}
-          pointerEvents="none"
-        />
+        <View style={[styles.bottomFade, { height: bottomFadeHeight }]} pointerEvents="none">
+          <BlurView
+            intensity={25}
+            tint="default"
+            experimentalBlurMethod="dimezisBlurView"
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Gradient mask to fade out the blur */}
+          <LinearGradient
+            colors={['transparent', 'rgba(255,255,255,0.08)']}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       )}
     </>
   );
@@ -48,16 +65,18 @@ const styles = StyleSheet.create({
   topFade: {
     position: 'absolute',
     top: 0,
-    left: -24, // Extend beyond content padding
+    left: -24,
     right: -24,
     zIndex: 10,
+    overflow: 'hidden',
   },
   bottomFade: {
     position: 'absolute',
     bottom: 0,
-    left: -24, // Extend beyond content padding
+    left: -24,
     right: -24,
     zIndex: 10,
+    overflow: 'hidden',
   },
 });
 
