@@ -1,15 +1,13 @@
 /**
- * Get Rolling - Age Screen (Conversational)
- * FIXED LAYOUT VERSION
+ * Get Rolling - Age Screen
+ * Selection-based age range picker
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -18,22 +16,15 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  Easing,
   FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  useSpeechRecognitionEvent,
-  ExpoSpeechRecognitionModule,
-} from 'expo-speech-recognition';
 
 import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
-import ConversationalInput from '@/components/get-rolling/ConversationalInput';
-import AnimatedText from '@/components/get-rolling/AnimatedText';
-import { getOnboardingData } from '@/utils/onboardingStorage';
+import SelectionCard from '@/components/get-rolling/SelectionCard';
+import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION PHILOSOPHY
@@ -51,15 +42,22 @@ const WARMTH_PHRASES: Record<number, string> = {
   3: "There's no rush here.", // Struggling
 };
 
+// Age range options
+const AGE_OPTIONS = [
+  { id: 'under-18', label: 'Under 18' },
+  { id: '18-24', label: '18 - 24' },
+  { id: '25-34', label: '25 - 34' },
+  { id: '35-44', label: '35 - 44' },
+  { id: '45-54', label: '45 - 54' },
+  { id: '55+', label: '55+' },
+];
+
 type FlowState =
   | 'typing_indicator'
   | 'subtitle_slide_in'
   | 'indicator_fade_out'
   | 'title_slide_in'
-  | 'show_input'
-  | 'user_responded'
-  | 'typing_reply'
-  | 'show_reply'
+  | 'show_options'
   | 'complete';
 
 const TOTAL_STEPS = 5;
@@ -69,11 +67,7 @@ export default function AgeScreen() {
   const insets = useSafeAreaInsets();
 
   const [flowState, setFlowState] = useState<FlowState>('typing_indicator');
-  const [userResponse, setUserResponse] = useState('');
-  const [extractedAge, setExtractedAge] = useState<number | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [showBottomIndicator, setShowBottomIndicator] = useState(true);
-  const [liveTranscript, setLiveTranscript] = useState('');
+  const [selectedAge, setSelectedAge] = useState<string | null>(null);
 
   // Personalization state
   const [firstName, setFirstName] = useState<string | null>(null);
@@ -95,66 +89,6 @@ export default function AgeScreen() {
     loadPersonalization();
   }, []);
 
-  // Debounce timer for auto-submit (3 seconds of silence)
-  const SILENCE_TIMEOUT_MS = 3000;
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finalTranscriptRef = useRef<string>('');
-
-  // Clear silence timer
-  const clearSilenceTimer = () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-  };
-
-  // Speech recognition event handlers
-  useSpeechRecognitionEvent('start', () => {
-    console.log('[Speech] Started');
-    setIsListening(true);
-    finalTranscriptRef.current = '';
-  });
-
-  useSpeechRecognitionEvent('end', () => {
-    console.log('[Speech] Ended');
-    clearSilenceTimer();
-
-    // Submit final transcript if available
-    if (finalTranscriptRef.current.trim()) {
-      handleSubmit(finalTranscriptRef.current.trim());
-      setLiveTranscript('');
-      finalTranscriptRef.current = '';
-    }
-    setIsListening(false);
-  });
-
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript || '';
-    console.log('[Speech] Result:', transcript, 'isFinal:', event.isFinal);
-
-    setLiveTranscript(transcript);
-    finalTranscriptRef.current = transcript;
-
-    // Reset the silence timer on each new result
-    clearSilenceTimer();
-
-    // Start a new silence timer - auto-submit after 3 seconds of no new speech
-    silenceTimerRef.current = setTimeout(() => {
-      if (finalTranscriptRef.current.trim() && isListening) {
-        console.log('[Speech] Silence timeout - auto submitting');
-        ExpoSpeechRecognitionModule.stop();
-      }
-    }, SILENCE_TIMEOUT_MS);
-  });
-
-  useSpeechRecognitionEvent('error', (event) => {
-    console.log('[Speech] Error:', event.error, event.message);
-    clearSilenceTimer();
-    setIsListening(false);
-    setLiveTranscript('');
-    finalTranscriptRef.current = '';
-  });
-
   const indicatorOpacity = useSharedValue(1);
   const indicatorHeight = useSharedValue(24);
   const subtitleTranslateY = useSharedValue(30);
@@ -169,84 +103,38 @@ export default function AgeScreen() {
       setFlowState('subtitle_slide_in');
       subtitleOpacity.value = withTiming(1, { duration: 400 });
       subtitleTranslateY.value = withTiming(0, { duration: 400 });
-    }, 3000));
+    }, 2000));
 
     timers.push(setTimeout(() => {
       setFlowState('indicator_fade_out');
       indicatorOpacity.value = withTiming(0, { duration: 400 });
       indicatorHeight.value = withTiming(0, { duration: 400 });
-    }, 4000));
+    }, 2800));
 
     timers.push(setTimeout(() => {
       setFlowState('title_slide_in');
       titleOpacity.value = withTiming(1, { duration: 500 });
       titleTranslateY.value = withTiming(0, { duration: 500 });
-    }, 4500));
+    }, 3200));
 
     timers.push(setTimeout(() => {
-      setFlowState('show_input');
-    }, 5500));
+      setFlowState('show_options');
+    }, 4000));
 
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  const extractAge = (text: string): number | null => {
-    const match = text.match(/\d+/);
-    return match ? parseInt(match[0], 10) : null;
+  const handleSelectAge = async (id: string) => {
+    setSelectedAge(id);
+    // Save to storage
+    await updateOnboardingData({ ageRange: id });
+    // Brief delay then navigate
+    setTimeout(() => {
+      router.push('/(get-rolling)/avatar-analysis');
+    }, 400);
   };
 
-  const handleSubmit = (text: string) => {
-    setUserResponse(text);
-    const age = extractAge(text);
-    setExtractedAge(age);
-    setFlowState('user_responded');
-
-    setTimeout(() => setFlowState('typing_reply'), 800);
-    setTimeout(() => setFlowState('show_reply'), 2500);
-    setTimeout(() => setFlowState('complete'), 3500);
-    setTimeout(() => setShowBottomIndicator(false), 8500);
-  };
-
-  const handleStartListening = async () => {
-    try {
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!result.granted) {
-        console.log('[Speech] Permission denied');
-        return;
-      }
-
-      // Clear any previous state
-      setLiveTranscript('');
-      finalTranscriptRef.current = '';
-      clearSilenceTimer();
-
-      // Start speech recognition with realtime results
-      ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
-        interimResults: true,  // Enable realtime partial results
-        continuous: true,      // Keep listening until manually stopped or silence timeout
-        maxAlternatives: 1,
-      });
-    } catch (error) {
-      console.log('[Speech] Start error:', error);
-    }
-  };
-
-  const handleStopListening = () => {
-    clearSilenceTimer();
-    ExpoSpeechRecognitionModule.stop();
-  };
-
-  const handleNext = () => router.push('/(get-rolling)/avatar-analysis');
   const handleClose = () => router.replace('/(main)/chat');
-
-  // Get personalized subtitle
-  const getSubtitle = () => {
-    const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
-    const nameGreeting = firstName ? `Hi ${firstName}. ` : '';
-    const base = `${nameGreeting}This helps me understand\nwhere you are in life`;
-    return warmthPhrase ? `${base}\n${warmthPhrase}` : base;
-  };
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
@@ -264,145 +152,88 @@ export default function AgeScreen() {
     transform: [{ translateY: titleTranslateY.value }],
   }));
 
+  // Get personalized subtitle
+  const getSubtitle = () => {
+    const warmthPhrase = WARMTH_PHRASES[moodIntensity] || '';
+    const nameGreeting = firstName ? `Hi ${firstName}. ` : '';
+    const base = `${nameGreeting}This helps me understand\nwhere you are in life`;
+    return warmthPhrase ? `${base}\n${warmthPhrase}` : base;
+  };
+
   const showTypingIndicator = ['typing_indicator', 'subtitle_slide_in'].includes(flowState);
   const showSubtitle = flowState !== 'typing_indicator';
-  const showTitle = ['title_slide_in', 'show_input', 'user_responded', 'typing_reply', 'show_reply', 'complete'].includes(flowState);
-  const showInput = flowState === 'show_input';
-  const showLiveTranscript = flowState === 'show_input' && isListening && liveTranscript.trim().length > 0;
-  const showUserResponse = ['user_responded', 'typing_reply', 'show_reply', 'complete'].includes(flowState);
-  const showTypingReply = flowState === 'typing_reply';
-  const showAIReply = ['show_reply', 'complete'].includes(flowState);
-  const showNextButton = flowState === 'complete';
+  const showTitle = ['title_slide_in', 'show_options', 'complete'].includes(flowState);
+  const showOptions = ['show_options', 'complete'].includes(flowState);
 
   return (
     <View style={styles.container}>
       <AuroraGradient />
 
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-              <Ionicons name="close" size={28} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
+      <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+            <Ionicons name="close" size={28} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
 
-            <View style={styles.progressContainer}>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${(1 / TOTAL_STEPS) * 100}%` }]} />
-              </View>
+          <View style={styles.progressContainer}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${(1 / TOTAL_STEPS) * 100}%` }]} />
             </View>
-
-            <Text style={styles.stepText}>
-              1 <Text style={styles.stepTextLight}>of {TOTAL_STEPS}</Text>
-            </Text>
           </View>
 
-          {/* Conversation */}
-          <ScrollView
-            style={styles.conversationArea}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-          >
-            <Animated.View style={indicatorAnimatedStyle}>
-              {showTypingIndicator && <TypingIndicator />}
-            </Animated.View>
-
-            {showSubtitle && (
-              <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                {getSubtitle()}
-              </Animated.Text>
-            )}
-
-            {showTitle && (
-              <Animated.View style={titleAnimatedStyle}>
-                <AnimatedText
-                  text="How old are you?"
-                  style={styles.title}
-                  activeColor="#FFFFFF"
-                  delayPerWord={120}
-                  wordDuration={300}
-                />
-              </Animated.View>
-            )}
-
-            {showLiveTranscript && (
-              <Text style={styles.liveTranscript}>{liveTranscript}</Text>
-            )}
-
-            {showUserResponse && (
-              <Animated.Text
-                style={styles.userResponse}
-                entering={FadeIn.duration(400)}
-              >
-                {userResponse}
-              </Animated.Text>
-            )}
-
-            {showTypingReply && (
-              <Animated.View style={styles.replyTyping} entering={FadeIn.duration(300)}>
-                <TypingIndicator />
-              </Animated.View>
-            )}
-
-            {showAIReply && (
-              <View style={styles.aiResponse}>
-                <AnimatedText
-                  // text={`Thank you for sharing that with me.\n\nThere's so much becoming and discovering in this part of life.\n\nI'm here to walk alongside you through it all.\n\nthank you again`}
-                  text={`Thank you for sharing that with me.`}
-                  style={styles.aiText}
-                  activeColor="#FFFFFF"
-                  startDelay={700}
-                  paragraphDelay={1500}
-                />
-              </View>
-            )}
-
-            {showAIReply && showBottomIndicator && (
-              <Animated.View
-                style={styles.bottomTyping}
-                entering={FadeIn.delay(800).duration(300)}
-                exiting={FadeOut.duration(400)}
-              >
-                <TypingIndicator />
-              </Animated.View>
-            )}
-          </ScrollView>
-
-          {/* Next */}
-          {showNextButton && (
-            <Animated.View
-              style={styles.nextButtonContainer}
-              entering={FadeIn.duration(400)}
-            >
-              <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-                <Ionicons name="arrow-forward" size={28} color="#2D1525" />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
+          <Text style={styles.stepText}>
+            1 <Text style={styles.stepTextLight}>of {TOTAL_STEPS}</Text>
+          </Text>
         </View>
 
-        {showInput && (
-          <View style={{ paddingBottom: insets.bottom + 10 }}>
-            <ConversationalInput
-              placeholder="Share your age here..."
-              onSubmit={handleSubmit}
-              onStartListening={handleStartListening}
-              onStopListening={handleStopListening}
-              isListening={isListening}
-            />
-          </View>
-        )}
-      </KeyboardAvoidingView>
+        {/* Conversation Area */}
+        <ScrollView
+          style={styles.conversationArea}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
+        >
+          <Animated.View style={indicatorAnimatedStyle}>
+            {showTypingIndicator && <TypingIndicator />}
+          </Animated.View>
+
+          {showSubtitle && (
+            <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
+              {getSubtitle()}
+            </Animated.Text>
+          )}
+
+          {showTitle && (
+            <Animated.Text style={[styles.title, titleAnimatedStyle]}>
+              How old are you?
+            </Animated.Text>
+          )}
+
+          {/* Selection Options */}
+          {showOptions && (
+            <Animated.View
+              style={styles.optionsContainer}
+              entering={FadeIn.duration(400)}
+            >
+              {AGE_OPTIONS.map((option) => (
+                <SelectionCard
+                  key={option.id}
+                  label={option.label}
+                  isSelected={selectedAge === option.id}
+                  onPress={() => handleSelectAge(option.id)}
+                  accentColor="#2D1525"
+                />
+              ))}
+            </Animated.View>
+          )}
+        </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  keyboardView: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 24 },
 
   header: {
@@ -435,51 +266,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit-Bold',
     color: '#FFF',
     lineHeight: 40,
+    marginBottom: 24,
   },
 
-  liveTranscript: {
-    fontSize: 28,
-    fontFamily: 'Outfit-Bold',
-    color: '#2D1525',
-    marginTop: 32,
-    marginBottom: 12,
-  },
-
-  userResponse: {
-    fontSize: 28,
-    fontFamily: 'Outfit-Bold',
-    color: '#2D1525',
-    marginTop: 32,
-    marginBottom: 12,
-  },
-
-  replyTyping: { marginTop: 16 },
-
-  aiResponse: { marginTop: 16, gap: 14 },
-
-  aiAgeRow: { flexDirection: 'row', alignItems: 'center' },
-  aiAgeText: { fontSize: 28, fontFamily: 'Outfit-Bold', color: '#FFF' },
-  heartIcon: { marginLeft: 8 },
-
-  aiText: {
-    fontSize: 28,
-    fontFamily: 'Outfit-Bold',
-    color: '#FFF',
-  },
-
-  bottomTyping: { marginTop: 24 },
-
-  nextButtonContainer: {
-    position: 'absolute',
-    bottom: -10,
-    right: 22,
-  },
-  nextButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  optionsContainer: {
+    gap: 12,
   },
 });

@@ -40,6 +40,11 @@ export interface OnboardingData {
   notificationsEnabled?: boolean;
   microphoneEnabled?: boolean;
 
+  // Get Rolling flow data
+  ageRange?: string;           // Age selection (under-18, 18-24, 25-34, etc.)
+  avatarReason?: string;       // Why they picked their avatar
+  discomfortReasons?: string[]; // What's weighing on them (multi-select)
+
   // Completion tracking
   completedSteps?: string[];
   onboardingCompleted?: boolean;
