@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import SelectionCard from '@/components/get-rolling/SelectionCard';
-import ScrollFadeEdges from '@/components/get-rolling/ScrollFadeEdges';
+import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
 import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -260,9 +260,8 @@ export default function DiscomfortScreen() {
           </Text>
         </View>
 
-        {/* Conversation Area with Fade Edges */}
-        <View style={styles.scrollContainer}>
-          <ScrollFadeEdges topFadeHeight={30} bottomFadeHeight={120} />
+        {/* Conversation Area with Content Fade */}
+        <FadingScrollWrapper topFadeHeight={50} bottomFadeHeight={100}>
           <ScrollView
             style={styles.conversationArea}
             showsVerticalScrollIndicator={false}
@@ -306,7 +305,7 @@ export default function DiscomfortScreen() {
             </Animated.View>
           )}
           </ScrollView>
-        </View>
+        </FadingScrollWrapper>
 
         {/* Continue Button */}
         {showOptions && canContinue && (
@@ -344,10 +343,6 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 17, fontFamily: 'Outfit-SemiBold', color: '#FFF', minWidth: 60, textAlign: 'right' },
   stepTextLight: { fontFamily: 'Outfit-Regular', color: 'rgba(255,255,255,0.7)' },
 
-  scrollContainer: {
-    flex: 1,
-    position: 'relative',
-  },
   conversationArea: { flex: 1 },
 
   subtitle: {
