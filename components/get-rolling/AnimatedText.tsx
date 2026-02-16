@@ -4,13 +4,15 @@
  * Supports paragraphs with \n\n separator
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedReaction,
   withTiming,
   withDelay,
+  scrollTo as reanimatedScrollTo,
   Easing,
 } from 'react-native-reanimated';
 
@@ -24,6 +26,11 @@ interface AnimatedTextProps {
   startDelay?: number;
   paragraphDelay?: number;  // Delay between paragraphs
   onComplete?: () => void;
+  /** Fires when each paragraph begins highlighting */
+  onParagraphStart?: (paragraphIndex: number, totalParagraphs: number) => void;
+  /** Pass an Animated ScrollView ref (useAnimatedRef) + enable flag for smooth teleprompter-style scrolling */
+  autoScroll?: boolean;
+  scrollViewRef?: any; // AnimatedRef<Animated.ScrollView>
 }
 
 // Individual word component with its own animation
@@ -73,6 +80,7 @@ function Paragraph({
   wordDuration,
   activeColor,
   style,
+  onLayout,
 }: {
   words: string[];
   startDelay: number;
@@ -80,9 +88,13 @@ function Paragraph({
   wordDuration: number;
   activeColor: string;
   style: any;
+  onLayout?: (y: number) => void;
 }) {
   return (
-    <View style={styles.paragraph}>
+    <View
+      style={styles.paragraph}
+      onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}
+    >
       {words.map((word, index) => (
         <WordItem
           key={`${index}-${word}`}
@@ -108,6 +120,9 @@ export default function AnimatedText({
   startDelay = 0,
   paragraphDelay = 1800,
   onComplete,
+  onParagraphStart,
+  autoScroll = false,
+  scrollViewRef,
 }: AnimatedTextProps) {
   // Split text into paragraphs by \n\n, then each paragraph into words
   const paragraphs = useMemo(() => {
@@ -147,8 +162,59 @@ export default function AnimatedText({
     }
   }, [onComplete, paragraphData, delayPerWord, wordDuration]);
 
+  // Fire onParagraphStart at each paragraph's start time
+  useEffect(() => {
+    if (!onParagraphStart) return;
+    const timers = paragraphData.map((data, index) =>
+      setTimeout(() => onParagraphStart(index, paragraphData.length), data.startDelay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [paragraphData, onParagraphStart]);
+
+  // Built-in auto-scroll: measure paragraph positions and scroll smoothly when they start
+  const paragraphYPositions = useRef<number[]>([]);
+  const scrollY = useSharedValue(0);
+
+  const handleParagraphLayout = (index: number, y: number) => {
+    paragraphYPositions.current[index] = y;
+  };
+
+  // Drive scroll position from shared value for buttery smooth animation
+  useAnimatedReaction(
+    () => scrollY.value,
+    (currentY) => {
+      if (autoScroll && scrollViewRef) {
+        reanimatedScrollTo(scrollViewRef, 0, currentY, false);
+      }
+    },
+  );
+
+  useEffect(() => {
+    if (!autoScroll || !scrollViewRef) return;
+    const timers = paragraphData.map((data, index) => {
+      if (index === 0) return null; // First paragraph is already visible
+      return setTimeout(() => {
+        const yPos = paragraphYPositions.current[index];
+        if (yPos !== undefined) {
+          // Smooth ease to paragraph position, offset 80px from top
+          scrollY.value = withTiming(Math.max(0, yPos - 80), {
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+          });
+        }
+      }, data.startDelay);
+    });
+    return () => timers.forEach(t => t && clearTimeout(t));
+  }, [paragraphData, autoScroll, scrollViewRef]);
+
+  // Track the container's Y position within the ScrollView
+  const containerYRef = useRef(0);
+
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      onLayout={autoScroll ? (e) => { containerYRef.current = e.nativeEvent.layout.y; } : undefined}
+    >
       {paragraphData.map((data, index) => (
         <Paragraph
           key={index}
@@ -158,6 +224,7 @@ export default function AnimatedText({
           wordDuration={wordDuration}
           activeColor={activeColor}
           style={style}
+          onLayout={autoScroll ? (y) => handleParagraphLayout(index, containerYRef.current + y) : undefined}
         />
       ))}
     </View>

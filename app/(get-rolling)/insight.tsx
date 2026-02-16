@@ -11,12 +11,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedRef,
   withTiming,
   FadeIn,
   FadeOut,
@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
 import { getOnboardingData } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -100,6 +101,9 @@ export default function InsightScreen() {
   const [flowState, setFlowState] = useState<FlowState>('typing_indicator');
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
 
+  // Auto-scroll ref (animated for smooth reanimated-driven scrolling)
+  const scrollViewRef = useAnimatedRef<Animated.ScrollView>();
+
   // Personalization state
   const [firstName, setFirstName] = useState<string | null>(null);
   const [primaryFeeling, setPrimaryFeeling] = useState<string | null>(null);
@@ -172,7 +176,8 @@ export default function InsightScreen() {
   }, []);
 
   const handleComplete = () => router.replace('/(main)/chat');
-  const handleClose = () => router.replace('/(main)/chat');
+  const handleClose = () => router.replace('/(main)/chat'); // Last screen - exit to chat
+
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
@@ -238,8 +243,8 @@ export default function InsightScreen() {
         <View style={[styles.content, { paddingTop: insets.top + 12 }]}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-              <Ionicons name="close" size={28} color="rgba(255,255,255,0.7)" />
+            <TouchableOpacity style={styles.closeButton} >
+              <Ionicons name="ban" size={28} color="rgba(255,255,255,0.7)" />
             </TouchableOpacity>
 
             <View style={styles.progressContainer}>
@@ -254,61 +259,66 @@ export default function InsightScreen() {
           </View>
 
           {/* Conversation */}
-          <ScrollView
-            style={styles.conversationArea}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-          >
-            <Animated.View style={indicatorAnimatedStyle}>
-              {showTypingIndicator && <TypingIndicator />}
-            </Animated.View>
-
-            {showSubtitle && (
-              <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                {getSubtitle()}
-              </Animated.Text>
-            )}
-
-            {showTitle && (
-              <Animated.View style={titleAnimatedStyle}>
-                <AnimatedText
-                  text="Something beautiful is already happening..."
-                  style={styles.title}
-                  activeColor="#FFFFFF"
-                  delayPerWord={120}
-                  wordDuration={300}
-                />
+          <FadingScrollWrapper topFadeHeight={50} bottomFadeHeight={80}>
+            <Animated.ScrollView
+              ref={scrollViewRef}
+              style={styles.conversationArea}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 120, paddingTop: 25 }}
+            >
+              <Animated.View style={indicatorAnimatedStyle}>
+                {showTypingIndicator && <TypingIndicator />}
               </Animated.View>
-            )}
 
-            {showTypingReply && (
-              <Animated.View style={styles.replyTyping} entering={FadeIn.duration(300)}>
-                <TypingIndicator />
-              </Animated.View>
-            )}
+              {showSubtitle && (
+                <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
+                  {getSubtitle()}
+                </Animated.Text>
+              )}
 
-            {showAIReply && (
-              <View style={styles.aiResponse}>
-                <AnimatedText
-                  text={getInsightMessage()}
-                  style={styles.aiText}
-                  activeColor="#FFFFFF"
-                  startDelay={700}
-                  paragraphDelay={1500}
-                />
-              </View>
-            )}
+              {showTitle && (
+                <Animated.View style={titleAnimatedStyle}>
+                  <AnimatedText
+                    text="Something beautiful is already happening..."
+                    style={styles.title}
+                    activeColor="#FFFFFF"
+                    delayPerWord={120}
+                    wordDuration={300}
+                  />
+                </Animated.View>
+              )}
 
-            {showAIReply && showBottomIndicator && (
-              <Animated.View
-                style={styles.bottomTyping}
-                entering={FadeIn.delay(800).duration(300)}
-                exiting={FadeOut.duration(400)}
-              >
-                <TypingIndicator />
-              </Animated.View>
-            )}
-          </ScrollView>
+              {showTypingReply && (
+                <Animated.View style={styles.replyTyping} entering={FadeIn.duration(300)}>
+                  <TypingIndicator />
+                </Animated.View>
+              )}
+
+              {showAIReply && (
+                <View style={styles.aiResponse}>
+                  <AnimatedText
+                    text={getInsightMessage()}
+                    style={styles.aiText}
+                    activeColor="#FFFFFF"
+                    startDelay={700}
+                    paragraphDelay={1500}
+                    autoScroll={true}
+                    scrollViewRef={scrollViewRef}
+                  />
+                </View>
+              )}
+
+              {showAIReply && showBottomIndicator && (
+                <Animated.View
+                  style={styles.bottomTyping}
+                  entering={FadeIn.delay(800).duration(300)}
+                  exiting={FadeOut.duration(400)}
+                >
+                  <TypingIndicator />
+                </Animated.View>
+              )}
+            </Animated.ScrollView>
+          </FadingScrollWrapper>
 
           {/* Complete Button */}
           {showCompleteButton && (
@@ -317,8 +327,7 @@ export default function InsightScreen() {
               entering={FadeIn.duration(400)}
             >
               <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
-                <Text style={styles.completeButtonText}>Begin My Journey</Text>
-                <Ionicons name="sparkles" size={20} color="#3A2850" style={{ marginLeft: 8 }} />
+                <Text style={styles.completeButtonText}>I'm ready</Text>
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -336,7 +345,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
   },
   closeButton: { width: 48, height: 48, justifyContent: 'center' },
   progressContainer: { flex: 1, paddingHorizontal: 12 },
@@ -349,7 +358,7 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 17, fontFamily: 'Outfit-SemiBold', color: '#FFF', minWidth: 60, textAlign: 'right' },
   stepTextLight: { fontFamily: 'Outfit-Regular', color: 'rgba(255,255,255,0.7)' },
 
-  conversationArea: { paddingTop: 20 },
+  conversationArea: { flex: 1 },
 
   subtitle: {
     fontSize: 17,
@@ -370,7 +379,7 @@ const styles = StyleSheet.create({
   aiResponse: { marginTop: 24, gap: 14 },
 
   aiText: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'Outfit-Bold',
     color: '#FFF',
   },
@@ -385,13 +394,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   completeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 40,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    backgroundColor: '#ffffff',
   },
   completeButtonText: {
     fontSize: 18,

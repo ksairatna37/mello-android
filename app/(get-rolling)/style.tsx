@@ -32,6 +32,7 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
+import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
 
 // Warm Sunset/Coral Aurora - Inviting & Nurturing
 const AURORA_GRADIENT = ['#F8E8E0', '#F0C8B8', '#D88868', '#984838', '#401818', '#E8A088'] as const;
@@ -196,7 +197,7 @@ export default function StyleScreen() {
   };
 
   const handleNext = () => router.push('/(get-rolling)/presence');
-  const handleClose = () => router.replace('/(main)/chat');
+  const handleClose = () => router.push('/(get-rolling)/presence');
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
@@ -259,74 +260,76 @@ export default function StyleScreen() {
           </View>
 
           {/* Conversation */}
-          <ScrollView
-            style={styles.conversationArea}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-          >
-            <Animated.View style={indicatorAnimatedStyle}>
-              {showTypingIndicator && <TypingIndicator />}
-            </Animated.View>
-
-            {showSubtitle && (
-              <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
-                Everyone needs support differently{'\n'}There's no wrong answer here
-              </Animated.Text>
-            )}
-
-            {showTitle && (
-              <Animated.View style={titleAnimatedStyle}>
-                <AnimatedText
-                  text="How do you like to be supported when things get hard?"
-                  style={styles.title}
-                  activeColor="#FFFFFF"
-                  delayPerWord={120}
-                  wordDuration={300}
-                />
+          <FadingScrollWrapper topFadeHeight={50} bottomFadeHeight={80}>
+            <ScrollView
+              style={styles.conversationArea}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 60, paddingTop: 25 }}
+            >
+              <Animated.View style={indicatorAnimatedStyle}>
+                {showTypingIndicator && <TypingIndicator />}
               </Animated.View>
-            )}
 
-            {showLiveTranscript && (
-              <Text style={styles.liveTranscript}>{liveTranscript}</Text>
-            )}
+              {showSubtitle && (
+                <Animated.Text style={[styles.subtitle, subtitleAnimatedStyle]}>
+                  Everyone needs support differently{'\n'}There's no wrong answer here
+                </Animated.Text>
+              )}
 
-            {showUserResponse && (
-              <Animated.Text
-                style={styles.userResponse}
-                entering={FadeIn.duration(400)}
-              >
-                {userResponse}
-              </Animated.Text>
-            )}
+              {showTitle && (
+                <Animated.View style={titleAnimatedStyle}>
+                  <AnimatedText
+                    text="How do you like to be supported when things get hard?"
+                    style={styles.title}
+                    activeColor="#FFFFFF"
+                    delayPerWord={120}
+                    wordDuration={300}
+                  />
+                </Animated.View>
+              )}
 
-            {showTypingReply && (
-              <Animated.View style={styles.replyTyping} entering={FadeIn.duration(300)}>
-                <TypingIndicator />
-              </Animated.View>
-            )}
+              {showLiveTranscript && (
+                <Text style={styles.liveTranscript}>{liveTranscript}</Text>
+              )}
 
-            {showAIReply && (
-              <View style={styles.aiResponse}>
-                <AnimatedText
-                  text={getAIResponse()}
-                  style={styles.aiText}
-                  activeColor="#FFFFFF"
-                  startDelay={700}
-                  paragraphDelay={1500}
-                />
-              </View>
-            )}
+              {showUserResponse && (
+                <Animated.Text
+                  style={styles.userResponse}
+                  entering={FadeIn.duration(400)}
+                >
+                  {userResponse}
+                </Animated.Text>
+              )}
 
-            {showAIReply && showBottomIndicator && (
-              <Animated.View
-                style={styles.bottomTyping}
-                entering={FadeIn.delay(800).duration(300)}
-                exiting={FadeOut.duration(400)}
-              >
-                <TypingIndicator />
-              </Animated.View>
-            )}
-          </ScrollView>
+              {showTypingReply && (
+                <Animated.View style={styles.replyTyping} entering={FadeIn.duration(300)}>
+                  <TypingIndicator />
+                </Animated.View>
+              )}
+
+              {showAIReply && (
+                <View style={styles.aiResponse}>
+                  <AnimatedText
+                    text={getAIResponse()}
+                    style={styles.aiText}
+                    activeColor="#FFFFFF"
+                    startDelay={700}
+                    paragraphDelay={1500}
+                  />
+                </View>
+              )}
+
+              {showAIReply && showBottomIndicator && (
+                <Animated.View
+                  style={styles.bottomTyping}
+                  entering={FadeIn.delay(800).duration(300)}
+                  exiting={FadeOut.duration(400)}
+                >
+                  <TypingIndicator />
+                </Animated.View>
+              )}
+            </ScrollView>
+          </FadingScrollWrapper>
 
           {/* Next */}
           {showNextButton && (
@@ -366,7 +369,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
   },
   closeButton: { width: 48, height: 48, justifyContent: 'center' },
   progressContainer: { flex: 1, paddingHorizontal: 12 },
@@ -379,7 +382,7 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 17, fontFamily: 'Outfit-SemiBold', color: '#FFF', minWidth: 60, textAlign: 'right' },
   stepTextLight: { fontFamily: 'Outfit-Regular', color: 'rgba(255,255,255,0.7)' },
 
-  conversationArea: { paddingTop: 20 },
+  conversationArea: { flex: 1 },
 
   subtitle: {
     fontSize: 17,

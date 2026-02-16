@@ -202,7 +202,7 @@ export default function AvatarAnalysisScreen() {
     }, 400);
   };
 
-  const handleClose = () => router.replace('/(main)/chat');
+  const handleClose = () => router.push('/(get-rolling)/discomfort');
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
@@ -305,7 +305,7 @@ export default function AvatarAnalysisScreen() {
           <ScrollView
             style={styles.conversationArea}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60, paddingTop: 20 }}
+            contentContainerStyle={{ paddingBottom: 60, paddingTop: 25 }}
           >
             <Animated.View style={indicatorAnimatedStyle}>
               {showTypingIndicator && <TypingIndicator />}
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
   },
   closeButton: { width: 48, height: 48, justifyContent: 'center' },
   progressContainer: { flex: 1, paddingHorizontal: 12 },

@@ -6,7 +6,7 @@
  * The content blurs/fades out naturally, background shows through.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,26 +22,21 @@ export const FadingScrollWrapper = ({
   topFadeHeight = 50,
   bottomFadeHeight = 80,
 }: FadingScrollWrapperProps) => {
+  const [height, setHeight] = useState(800);
+
+  const topStop = Math.min(topFadeHeight / height, 0.15);
+  const bottomStop = Math.max(1 - bottomFadeHeight / height, 0.85);
+
   return (
     <MaskedView
       style={styles.container}
+      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
       maskElement={
-        <View style={styles.maskContainer}>
-          {/* Top fade: transparent → opaque */}
-          <LinearGradient
-            colors={['transparent', 'black']}
-            style={{ height: topFadeHeight }}
-          />
-
-          {/* Middle: fully visible */}
-          <View style={styles.solidMask} />
-
-          {/* Bottom fade: opaque → transparent */}
-          <LinearGradient
-            colors={['black', 'transparent']}
-            style={{ height: bottomFadeHeight }}
-          />
-        </View>
+        <LinearGradient
+          colors={['transparent', 'black', 'black', 'transparent']}
+          locations={[0, topStop, bottomStop, 1]}
+          style={styles.maskContainer}
+        />
       }
     >
       {children}
@@ -55,10 +50,6 @@ const styles = StyleSheet.create({
   },
   maskContainer: {
     flex: 1,
-  },
-  solidMask: {
-    flex: 1,
-    backgroundColor: 'black',
   },
 });
 

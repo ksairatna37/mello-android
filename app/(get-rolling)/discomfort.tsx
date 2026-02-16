@@ -195,7 +195,7 @@ export default function DiscomfortScreen() {
     }
   };
 
-  const handleClose = () => router.replace('/(main)/chat');
+  const handleClose = () => router.push('/(get-rolling)/inhale-exhale');
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
@@ -265,7 +265,7 @@ export default function DiscomfortScreen() {
           <ScrollView
             style={styles.conversationArea}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 140, paddingTop: 20 }}
+            contentContainerStyle={{ paddingBottom: 60, paddingTop: 25 }}
           >
             <Animated.View style={indicatorAnimatedStyle}>
               {showTypingIndicator && <TypingIndicator />}
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
   },
   closeButton: { width: 48, height: 48, justifyContent: 'center' },
   progressContainer: { flex: 1, paddingHorizontal: 12 },
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgb(255, 255, 255)',
     alignItems: 'center',
     justifyContent: 'center',
   },

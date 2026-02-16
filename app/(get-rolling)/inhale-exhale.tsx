@@ -696,7 +696,7 @@ export default function InhaleExhaleScreen() {
 
   // Navigation
   const handleNext = () => router.push('/(get-rolling)/insight');
-  const handleClose = () => router.replace('/(main)/chat');
+  const handleClose = () => router.push('/(get-rolling)/insight');
 
   // Handle long press to skip/end breathing
   const handleLongPressSkip = () => {
@@ -1151,7 +1151,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   closeButton: { width: 48, height: 48, justifyContent: 'center' },
   progressContainer: { flex: 1, paddingHorizontal: 12 },
