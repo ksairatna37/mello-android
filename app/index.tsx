@@ -23,7 +23,7 @@ export default function Index() {
   useEffect(() => {
     // DEV: Skip directly to Get Rolling for testing
     if (DEV_SKIP_TO_GET_ROLLING) {
-      setDestination('/(get-rolling)/age');
+      setDestination('/(main)/chat');
       return;
     }
 

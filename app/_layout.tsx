@@ -4,6 +4,9 @@
  * Includes AuthProvider for Google OAuth
  */
 
+// Polyfills must be imported before any hume SDK usage
+import '../polyfills';
+
 import React, { useState, useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

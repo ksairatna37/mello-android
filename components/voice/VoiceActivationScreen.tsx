@@ -1,6 +1,6 @@
 /**
  * VoiceActivationScreen Component
- * Based on mockup 11 - Activate Agent screen
+ * Dark glassmorphic theme - Activate Agent screen
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -120,8 +120,8 @@ export default function VoiceActivationScreen({
         AI Voice Mode
       </Text>
 
-      {/* Main Card */}
-      <View style={styles.mainCard}>
+      {/* Content area */}
+      <View style={styles.content}>
         <Text style={styles.activateTitle}>Activate Agent</Text>
 
         {/* Animated Orb */}
@@ -146,11 +146,6 @@ export default function VoiceActivationScreen({
           </Text>
         </Text>
       </View>
-
-      {/* Footer text */}
-      <Text style={styles.footerText}>
-        Enhanced AI features for voice-based interaction.
-      </Text>
     </View>
   );
 }
@@ -158,34 +153,26 @@ export default function VoiceActivationScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F7',
     paddingHorizontal: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: 'Outfit-Bold',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 40,
-    fontFamily: 'Outfit-Bold',
   },
-  mainCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 32,
+  content: {
+    flex: 1,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
+    paddingTop: 32,
+    paddingBottom: 120,
   },
   activateTitle: {
     fontSize: 22,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 32,
     fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 32,
   },
   orbWrapper: {
     marginBottom: 40,
@@ -195,7 +182,7 @@ const styles = StyleSheet.create({
     height: 160,
   },
   continueButton: {
-    backgroundColor: '#FFD4D8',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     paddingVertical: 16,
     paddingHorizontal: 80,
     borderRadius: 30,
@@ -203,26 +190,17 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
     fontFamily: 'Outfit-SemiBold',
+    color: '#1A1A1A',
   },
   termsText: {
     fontSize: 14,
-    color: '#666',
+    fontFamily: 'Outfit-Regular',
+    color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
     lineHeight: 22,
-    fontFamily: 'Outfit-Regular',
   },
   linkText: {
-    color: '#64B5F6',
-  },
-  footerText: {
-    textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    marginTop: 'auto',
-    marginBottom: 40,
-    fontFamily: 'Outfit-Regular',
+    color: '#b9a6ff',
   },
 });

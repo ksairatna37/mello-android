@@ -1,26 +1,33 @@
 /**
  * ChatScreen Component
- * Pixel-perfect clone of the mint/green gradient chat design
+ * Clean minimal chat matching web's TextChat.tsx design
+ * Gradient bubbles, avatars, typewriter animation, pill input
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import GradientBackground from '@/components/common/GradientBackground';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
+import { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
+import TypewriterText from './TypewriterText';
+import LoadingDots from './LoadingDots';
+import MessageAvatar from './MessageAvatar';
+
+// ═══════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════
 
 interface Message {
   id: string;
@@ -31,45 +38,48 @@ interface Message {
 
 interface ChatScreenProps {
   username?: string;
-  avatarUrl?: string;
-  credits?: number;
-  onVoicePress?: () => void;
-  onUpgradePress?: () => void;
-  onSettingsPress?: () => void;
 }
 
-// Crisis keywords for detection
-const CRISIS_KEYWORDS = [
-  'suicide', 'kill myself', 'want to die', 'end my life',
-  'harm myself', 'cutting', 'self-harm', 'overdose',
-  'feeling hopeless', 'feeling worthless', 'no reason to live',
-  'want to disappear', "can't cope",
-];
+// ═══════════════════════════════════════════════════
+// SIMULATED RESPONSES
+// ═══════════════════════════════════════════════════
 
-const detectCrisis = (message: string): boolean => {
-  const lowerMessage = message.toLowerCase();
-  return CRISIS_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
-};
+function getSimulatedResponse(input: string): string {
+  const responses = [
+    "I hear you, and I'm really glad you shared that with me. Want to tell me more about what's going on?",
+    "That sounds like a lot to carry. It's okay to feel this way. How have you been coping?",
+    "Thanks for opening up to me! It takes courage to talk about these things. What would feel helpful right now?",
+    "I'm here for you. Sometimes just talking about things can help lighten the load. What else is on your mind?",
+  ];
+  return responses[Math.floor(Math.random() * responses.length)];
+}
 
-export default function ChatScreen({
-  username = 'Friend',
-  avatarUrl,
-  credits = 245,
-  onVoicePress,
-  onUpgradePress,
-  onSettingsPress,
-}: ChatScreenProps) {
+// ═══════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════
+
+export default function ChatScreen({ username = 'Friend' }: ChatScreenProps) {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showCrisisResources, setShowCrisisResources] = useState(false);
+  const [displayedMessageIds, setDisplayedMessageIds] = useState<Set<string>>(new Set());
   const flatListRef = useRef<FlatList>(null);
 
-  const welcomeMessage = `What's been on\nyour mind lately?`;
+  // Send welcome message on mount
+  useEffect(() => {
+    const welcomeMsg: Message = {
+      id: 'welcome',
+      text: "Hey! I'm Mello. I'm here whenever you want to talk, vent, or just think out loud. What's on your mind?",
+      isUser: false,
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMsg]);
+  }, []);
 
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
+  const handleSend = useCallback(async () => {
+    if (!inputText.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -86,81 +96,105 @@ export default function ChatScreen({
     setInputText('');
     setIsLoading(true);
 
-    try {
-      // TODO: Implement API call
-      setTimeout(() => {
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: getSimulatedResponse(inputText),
-          isUser: false,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiMessage]);
-        setIsLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error('Chat error:', error);
+    setTimeout(() => {
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: getSimulatedResponse(inputText),
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, aiMessage]);
       setIsLoading(false);
-    }
-  };
+    }, 1500);
+  }, [inputText, isLoading]);
 
+  // Auto-scroll on new messages
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.messageBubble,
-        item.isUser ? styles.userMessage : styles.aiMessage,
-      ]}
-    >
-      <Text
-        style={[
-          styles.messageText,
-          item.isUser ? styles.userMessageText : styles.aiMessageText,
-        ]}
-      >
-        {item.text}
-      </Text>
-    </View>
-  );
+  const handleTypewriterComplete = useCallback((id: string) => {
+    setDisplayedMessageIds(prev => new Set(prev).add(id));
+  }, []);
+
+  const renderMessage = useCallback(({ item }: { item: Message }) => {
+    const isNew = !item.isUser && !displayedMessageIds.has(item.id);
+    const initial = username.charAt(0);
+
+    return (
+      <View style={[styles.messageRow, item.isUser ? styles.messageRowUser : styles.messageRowAI]}>
+        {/* AI avatar on left */}
+        {!item.isUser && (
+          <View style={styles.avatarContainer}>
+            <MessageAvatar type="ai" size={40} />
+          </View>
+        )}
+
+        {/* Bubble */}
+        <LinearGradient
+          colors={['rgba(191,169,254,0.2)', 'rgba(227,193,249,0.2)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.messageBubble}
+        >
+          {isNew ? (
+            <TypewriterText
+              text={item.text}
+              speed={25}
+              style={styles.messageText}
+              onComplete={() => handleTypewriterComplete(item.id)}
+            />
+          ) : (
+            <Text style={styles.messageText}>{item.text}</Text>
+          )}
+        </LinearGradient>
+
+        {/* User avatar on right */}
+        {item.isUser && (
+          <View style={styles.avatarContainer}>
+            <MessageAvatar type="user" size={40} userInitial={initial} />
+          </View>
+        )}
+      </View>
+    );
+  }, [displayedMessageIds, username, handleTypewriterComplete]);
+
+  const renderLoading = () => {
+    if (!isLoading) return null;
+    return (
+      <View style={[styles.messageRow, styles.messageRowAI]}>
+        <View style={styles.avatarContainer}>
+          <MessageAvatar type="ai" size={40} />
+        </View>
+        <LinearGradient
+          colors={['rgba(191,169,254,0.2)', 'rgba(227,193,249,0.2)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.loadingBubble}
+        >
+          <LoadingDots />
+        </LinearGradient>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* Gradient Background */}
-      <GradientBackground />
-
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        {/* User Avatar */}
-        <View style={styles.avatarContainer}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons name="person" size={20} color="#666" />
-            </View>
-          )}
-        </View>
-
-        {/* Settings Icon */}
-        <TouchableOpacity style={styles.settingsButton} onPress={onSettingsPress}>
-          <Ionicons name="settings-outline" size={24} color="#000" />
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Text style={styles.headerTitle}>Chat with Mello</Text>
       </View>
 
-      {/* Main Content */}
-      {messages.length === 0 ? (
-        <View style={styles.welcomeContainer}>
-          <Text style={styles.greeting}>Hi {username}</Text>
-          <Text style={styles.welcomeText}>{welcomeMessage}</Text>
-        </View>
-      ) : (
+      {/* Messages */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+        keyboardVerticalOffset={0}
+      >
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -168,15 +202,46 @@ export default function ChatScreen({
           keyExtractor={item => item.id}
           contentContainerStyle={styles.messagesContainer}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={renderLoading}
+          removeClippedSubviews={false}
         />
-      )}
 
-      {/* Loading indicator */}
-      {isLoading && (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Mello is thinking...</Text>
+        {/* Input Bar */}
+        <View style={[styles.inputWrapper, { paddingBottom: 16 }]}>
+          <View style={styles.inputPill}>
+            <TextInput
+              style={styles.input}
+              placeholder={isLoading ? 'Please wait...' : 'Type your message'}
+              placeholderTextColor={LIGHT_THEME.textMuted}
+              value={inputText}
+              onChangeText={setInputText}
+              editable={!isLoading}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+            />
+
+            {/* Clear button */}
+            {inputText.length > 0 && (
+              <Pressable style={styles.clearButton} onPress={() => setInputText('')}>
+                <Ionicons name="close" size={18} color={LIGHT_THEME.textSecondary} />
+              </Pressable>
+            )}
+
+            {/* Send button */}
+            <Pressable
+              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || isLoading}
+            >
+              <Ionicons
+                name="arrow-up"
+                size={20}
+                color={inputText.trim() ? '#FFFFFF' : LIGHT_THEME.textMuted}
+              />
+            </Pressable>
+          </View>
         </View>
-      )}
+      </KeyboardAvoidingView>
 
       {/* Crisis Resources Modal */}
       {showCrisisResources && (
@@ -187,263 +252,128 @@ export default function ChatScreen({
               It sounds like you might be going through something difficult.
               Would you like to see some resources that can help?
             </Text>
-            <TouchableOpacity
+            <Pressable
               style={styles.crisisButton}
-              onPress={() => setShowCrisisResources(false)}
+              onPress={() => {
+                setShowCrisisResources(false);
+                callCrisisLine();
+              }}
             >
               <Text style={styles.crisisButtonText}>View Resources</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </Pressable>
+            <Pressable
               style={styles.crisisDismiss}
               onPress={() => setShowCrisisResources(false)}
             >
               <Text style={styles.crisisDismissText}>Continue Chatting</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       )}
-
-      {/* Input Area - Frosted Glass Card */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.inputWrapper}
-      >
-        <View style={styles.inputCard}>
-          {/* Credits & Upgrade Row */}
-          <View style={styles.creditsRow}>
-            <Text style={styles.creditsText}>
-              <Text style={styles.creditsNumber}>{credits}</Text> Credits Remaining
-            </Text>
-            <TouchableOpacity onPress={onUpgradePress}>
-              <Text style={styles.upgradeText}>Upgrade</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Input Field */}
-          <TextInput
-            style={styles.input}
-            placeholder="Describe your project..."
-            placeholderTextColor="#999"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-          />
-
-          {/* Action Row */}
-          <View style={styles.actionRow}>
-            <View style={styles.leftActions}>
-              <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="add" size={24} color="#000" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="attach" size={24} color="#000" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={onVoicePress}>
-                <Ionicons name="mic-outline" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                !inputText.trim() && styles.sendButtonDisabled,
-              ]}
-              onPress={handleSend}
-              disabled={!inputText.trim() || isLoading}
-            >
-              <Ionicons name="sparkles" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
     </View>
   );
-}
-
-function getSimulatedResponse(input: string): string {
-  const responses = [
-    "I hear you, and I'm really glad you shared that with me. Want to tell me more about what's going on?",
-    "That sounds like a lot to carry. It's okay to feel this way. How have you been coping?",
-    "Thanks for opening up to me! It takes courage to talk about these things. What would feel helpful right now?",
-    "I'm here for you. Sometimes just talking about things can help lighten the load. What else is on your mind?",
-  ];
-  return responses[Math.floor(Math.random() * responses.length)];
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  flex: {
+    flex: 1,
+  },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingBottom: 12,
   },
-  avatarContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  welcomeContainer: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
-  greeting: {
+  headerTitle: {
     fontSize: 18,
-    color: '#333',
-    marginBottom: 8,
-    fontFamily: 'Outfit-Regular',
-  },
-  welcomeText: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: '#000',
-    lineHeight: 42,
-    fontFamily: 'Outfit-Bold',
-  },
-  messagesContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexGrow: 1,
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    padding: 14,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  userMessage: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 6,
-  },
-  aiMessage: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 6,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  userMessageText: {
-    color: '#fff',
-  },
-  aiMessageText: {
-    color: '#000',
-  },
-  loadingContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-  },
-  loadingText: {
-    color: '#333',
-    fontStyle: 'italic',
-  },
-  inputWrapper: {
-    paddingHorizontal: 16,
-    paddingBottom: 34,
-  },
-  inputCard: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#7EECD3',
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  creditsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  creditsText: {
-    fontSize: 14,
-    color: '#666',
-    fontFamily: 'Outfit-Regular',
-  },
-  creditsNumber: {
-    fontWeight: '600',
-    color: '#000',
-  },
-  upgradeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2ECC71',
     fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textPrimary,
   },
-  input: {
-    fontSize: 16,
-    color: '#000',
-    minHeight: 40,
-    maxHeight: 100,
-    paddingVertical: 8,
-    fontFamily: 'Outfit-Regular',
+
+  // Messages
+  messagesContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 16,
   },
-  actionRow: {
+  messageRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  leftActions: {
-    flexDirection: 'row',
-    gap: 8,
+  messageRowUser: {
+    justifyContent: 'flex-end',
   },
-  actionButton: {
+  messageRowAI: {
+    justifyContent: 'flex-start',
+  },
+  avatarContainer: {
     width: 40,
     height: 40,
-    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  messageBubble: {
+    maxWidth: '70%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+  messageText: {
+    fontSize: 15,
+    fontFamily: 'Outfit-Regular',
+    color: '#1F2937',
+    lineHeight: 22,
+  },
+  loadingBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+
+  // Input
+  inputWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  inputPill: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(239,237,250,0.4)',
+    borderRadius: 9999,
+    paddingLeft: 20,
+    paddingRight: 6,
+    paddingVertical: 4,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textPrimary,
+    paddingVertical: 12,
+  },
+  clearButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#2ECC71',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: LIGHT_THEME.accent,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: 'transparent',
   },
-  // Crisis styles
+
+  // Crisis modal (preserved from original)
   crisisOverlay: {
     position: 'absolute',
     top: 0,
@@ -457,31 +387,31 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   crisisCard: {
-    backgroundColor: '#fff',
+    backgroundColor: LIGHT_THEME.surface,
     borderRadius: 24,
     padding: 24,
     width: '100%',
     maxWidth: 340,
     alignItems: 'center',
+    ...CARD_SHADOW,
   },
   crisisTitle: {
     fontSize: 22,
-    fontWeight: '600',
-    color: '#000',
+    fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textPrimary,
     marginBottom: 16,
     textAlign: 'center',
-    fontFamily: 'Outfit-SemiBold',
   },
   crisisText: {
     fontSize: 16,
-    color: '#666',
+    fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
-    fontFamily: 'Outfit-Regular',
   },
   crisisButton: {
-    backgroundColor: '#2ECC71',
+    backgroundColor: LIGHT_THEME.accent,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 30,
@@ -490,17 +420,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   crisisButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
     fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
+    fontSize: 16,
   },
   crisisDismiss: {
     paddingVertical: 12,
   },
   crisisDismissText: {
-    color: '#666',
-    fontSize: 14,
     fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textSecondary,
+    fontSize: 14,
   },
 });

@@ -1,6 +1,6 @@
 /**
  * VoiceListeningScreen Component
- * Based on mockup 19 - Active listening with orb
+ * Dark glassmorphic theme - Active listening with orb
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -132,8 +132,8 @@ export default function VoiceListeningScreen({
         AI Voice Mode
       </Text>
 
-      {/* Main Card */}
-      <View style={styles.mainCard}>
+      {/* Content area */}
+      <View style={styles.content}>
         {/* Listening Orb */}
         <View style={styles.orbContainer}>
           <ListeningOrb isActive={isListening} />
@@ -145,26 +145,21 @@ export default function VoiceListeningScreen({
         {/* Input Bar */}
         <View style={styles.inputContainer}>
           <TouchableOpacity style={styles.plusButton} onPress={onPlusPress}>
-            <Ionicons name="add" size={24} color="#666" />
+            <Ionicons name="add" size={24} color="rgba(255,255,255,0.6)" />
           </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder="Start chatting..."
-            placeholderTextColor="#999"
+            placeholderTextColor="rgba(255,255,255,0.35)"
             value={inputText}
             onChangeText={setInputText}
             onSubmitEditing={handleSend}
           />
           <TouchableOpacity style={styles.settingsButton} onPress={onSettingsPress}>
-            <Ionicons name="settings-outline" size={22} color="#666" />
+            <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Footer text */}
-      <Text style={styles.footerText}>
-        Minimal voice UI with a live-listening orb
-      </Text>
     </View>
   );
 }
@@ -172,29 +167,19 @@ export default function VoiceListeningScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F7',
     paddingHorizontal: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: 'Outfit-Bold',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 40,
-    fontFamily: 'Outfit-Bold',
   },
-  mainCard: {
+  content: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
-    maxHeight: 500,
+    paddingBottom: 120,
   },
   orbContainer: {
     flex: 1,
@@ -212,7 +197,7 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     borderRadius: 120,
-    backgroundColor: 'rgba(255, 224, 178, 0.3)',
+    backgroundColor: 'rgba(255, 224, 178, 0.4)',
   },
   orbMain: {
     width: 200,
@@ -220,16 +205,18 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 20,
-    color: '#E0E0E0',
+    fontFamily: 'Outfit-Medium',
+    color: '#FFFFFF',
     marginTop: 20,
     marginBottom: 30,
-    fontFamily: 'Outfit-Medium',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F7',
+    backgroundColor: 'rgba(255,255,255,0.10)',
     borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 8,
     paddingVertical: 8,
     width: '100%',
@@ -238,7 +225,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.10)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -246,22 +233,14 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#1A1A1A',
-    paddingVertical: 8,
     fontFamily: 'Outfit-Regular',
+    color: '#FFFFFF',
+    paddingVertical: 8,
   },
   settingsButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    marginTop: 'auto',
-    marginBottom: 40,
-    fontFamily: 'Outfit-Regular',
   },
 });

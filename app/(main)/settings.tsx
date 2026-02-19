@@ -1,6 +1,6 @@
 /**
- * Settings Screen
- * App settings, crisis resources, legal, logout
+ * Settings Screen - Light Theme
+ * Clean white cards with soft shadows
  */
 
 import React from 'react';
@@ -8,57 +8,61 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
   Linking,
   Alert,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/colors';
-import { Spacing, BorderRadius, Shadows } from '@/constants/spacing';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import LightGradient, { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
 
 interface SettingsItemProps {
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle?: string;
   onPress: () => void;
   isDestructive?: boolean;
 }
 
-const SettingsItem: React.FC<SettingsItemProps> = ({
+const SettingsItem = ({
   icon,
   title,
   subtitle,
   onPress,
   isDestructive,
-}) => (
-  <TouchableOpacity style={styles.settingsItem} onPress={onPress}>
-    <Text style={styles.settingsIcon}>{icon}</Text>
+}: SettingsItemProps) => (
+  <Pressable style={styles.settingsItem} onPress={onPress}>
+    <View style={[styles.settingsIconCircle, isDestructive && styles.iconDestructive]}>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={isDestructive ? '#E53E3E' : LIGHT_THEME.accent}
+      />
+    </View>
     <View style={styles.settingsItemContent}>
-      <Text
-        style={[
-          styles.settingsTitle,
-          isDestructive && styles.settingsDestructive,
-        ]}
-      >
+      <Text style={[styles.settingsTitle, isDestructive && styles.settingsDestructive]}>
         {title}
       </Text>
       {subtitle && <Text style={styles.settingsSubtitle}>{subtitle}</Text>}
     </View>
-    <Text style={styles.settingsChevron}>{'\u203A'}</Text>
-  </TouchableOpacity>
+    <Ionicons name="chevron-forward" size={18} color={LIGHT_THEME.textMuted} />
+  </Pressable>
 );
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleCrisisResources = () => {
     Alert.alert(
       'Crisis Support',
       'If you\'re in crisis, help is available:\n\n' +
-        '📞 National Suicide Prevention Lifeline: 988\n\n' +
-        '💬 Crisis Text Line: Text HOME to 741741\n\n' +
+        'National Suicide Prevention Lifeline: 988\n\n' +
+        'Crisis Text Line: Text HOME to 741741\n\n' +
         'You are not alone. Help is always available.',
       [
         { text: 'Call 988', onPress: () => Linking.openURL('tel:988') },
@@ -86,7 +90,6 @@ export default function SettingsScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: () => {
-          // TODO: Implement logout
           router.replace('/');
         },
       },
@@ -103,7 +106,6 @@ export default function SettingsScreen() {
           text: 'Delete Account',
           style: 'destructive',
           onPress: () => {
-            // TODO: Implement account deletion
             console.log('Delete account');
           },
         },
@@ -112,18 +114,27 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <LightGradient variant="warm" />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Crisis Resources - Always visible and prominent */}
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + 20, paddingBottom: 120 },
+        ]}
+      >
+        {/* Header */}
+        <Text style={styles.headerTitle}>Settings</Text>
+
+        {/* Crisis Resources - Prominent */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
-          <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHighlight}>
             <SettingsItem
-              icon={'\u{1F198}'}
+              icon="heart-outline"
               title="Crisis Resources"
               subtitle="Get help when you need it"
               onPress={handleCrisisResources}
@@ -136,14 +147,14 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.sectionCard}>
             <SettingsItem
-              icon={'\u{1F4E7}'}
+              icon="mail-outline"
               title="Email"
               subtitle="user@example.com"
               onPress={() => {}}
             />
             <View style={styles.divider} />
             <SettingsItem
-              icon={'\u{1F512}'}
+              icon="lock-closed-outline"
               title="Change Password"
               onPress={() => {}}
             />
@@ -155,31 +166,31 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Legal</Text>
           <View style={styles.sectionCard}>
             <SettingsItem
-              icon={'\u{1F4DC}'}
+              icon="shield-outline"
               title="Privacy Policy"
               onPress={handlePrivacyPolicy}
             />
             <View style={styles.divider} />
             <SettingsItem
-              icon={'\u{1F4C4}'}
+              icon="document-text-outline"
               title="Terms of Service"
               onPress={handleTermsOfService}
             />
           </View>
         </View>
 
-        {/* Danger Zone */}
+        {/* Account Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Actions</Text>
           <View style={styles.sectionCard}>
             <SettingsItem
-              icon={'\u{1F6AA}'}
+              icon="log-out-outline"
               title="Sign Out"
               onPress={handleLogout}
             />
             <View style={styles.divider} />
             <SettingsItem
-              icon={'\u{1F5D1}\uFE0F'}
+              icon="trash-outline"
               title="Delete Account"
               onPress={handleDeleteAccount}
               isDestructive
@@ -187,7 +198,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* App info */}
+        {/* App Info */}
         <View style={styles.appInfo}>
           <Text style={styles.appName}>mello</Text>
           <Text style={styles.appVersion}>Version 1.0.0</Text>
@@ -196,107 +207,118 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.mello.light,
   },
-  header: {
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
-    backgroundColor: Colors.light.surface,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.light.text,
-    textAlign: 'center',
-  },
-  content: {
+  scrollView: {
     flex: 1,
-    paddingHorizontal: Spacing.screenHorizontal,
   },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textPrimary,
+    marginBottom: 24,
+  },
+
   section: {
-    marginTop: Spacing.lg,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
+    fontSize: 12,
+    fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textMuted,
+    marginBottom: 8,
+    marginLeft: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   sectionCard: {
-    backgroundColor: Colors.light.surface,
-    borderRadius: BorderRadius.lg,
-    ...Shadows.sm,
+    backgroundColor: LIGHT_THEME.surface,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...CARD_SHADOW,
   },
+  sectionCardHighlight: {
+    backgroundColor: LIGHT_THEME.accentLight,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...CARD_SHADOW,
+  },
+
   settingsItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  settingsIcon: {
-    fontSize: 24,
-    marginRight: Spacing.md,
+  settingsIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: LIGHT_THEME.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  iconDestructive: {
+    backgroundColor: '#FED7D7',
   },
   settingsItemContent: {
     flex: 1,
   },
   settingsTitle: {
     fontSize: 16,
-    color: Colors.light.text,
-    fontWeight: '500',
+    fontFamily: 'Outfit-Medium',
+    color: LIGHT_THEME.textPrimary,
   },
   settingsSubtitle: {
-    fontSize: 14,
-    color: Colors.light.textMuted,
+    fontSize: 13,
+    fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textSecondary,
     marginTop: 2,
   },
   settingsDestructive: {
-    color: Colors.light.error,
-  },
-  settingsChevron: {
-    fontSize: 24,
-    color: Colors.light.textMuted,
+    color: '#E53E3E',
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.light.border,
-    marginLeft: 56,
+    backgroundColor: LIGHT_THEME.border,
+    marginLeft: 66,
   },
+
   appInfo: {
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    marginTop: Spacing.lg,
+    paddingVertical: 32,
+    marginTop: 8,
   },
   appName: {
     fontSize: 24,
-    fontWeight: '300',
-    fontStyle: 'italic',
-    color: Colors.mello.purple,
+    fontFamily: 'Outfit-Light',
+    color: LIGHT_THEME.accent,
     letterSpacing: 1,
   },
   appVersion: {
-    fontSize: 14,
-    color: Colors.light.textMuted,
+    fontSize: 13,
+    fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textMuted,
     marginTop: 4,
   },
   disclaimer: {
     fontSize: 12,
-    color: Colors.light.textMuted,
-    marginTop: Spacing.md,
+    fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textMuted,
+    marginTop: 16,
     textAlign: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: 32,
     lineHeight: 18,
   },
 });

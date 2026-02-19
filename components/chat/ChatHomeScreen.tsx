@@ -1,13 +1,13 @@
 /**
- * ChatHomeScreen Component
- * Based on mockup 13 - Chat home with topic cards
+ * ChatHomeScreen Component - Light Theme
+ * Topic cards on light pastel background
  */
 
 import React from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   FlatList,
   TextInput,
@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, RadialGradient, Stop, Circle } from 'react-native-svg';
+import { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.42;
@@ -25,6 +26,7 @@ interface TopicCard {
   title: string;
   subtitle: string;
   gradientColors: string[];
+  bgColor: string;
 }
 
 const TOPIC_CARDS: TopicCard[] = [
@@ -32,25 +34,29 @@ const TOPIC_CARDS: TopicCard[] = [
     id: '1',
     title: 'Calm Mind',
     subtitle: 'Relaxation',
-    gradientColors: ['#C8E6C9', '#A5D6A7', '#81C784'],
+    gradientColors: ['#7FFFD4', '#58C898', '#38A878'],
+    bgColor: LIGHT_THEME.cardMint,
   },
   {
     id: '2',
     title: 'Reflections',
     subtitle: 'Self-discovery',
-    gradientColors: ['#E1BEE7', '#CE93D8', '#BA68C8'],
+    gradientColors: ['#D8B0F0', '#B888D8', '#9868B8'],
+    bgColor: LIGHT_THEME.cardPurple,
   },
   {
     id: '3',
     title: 'Sleep Better',
     subtitle: 'Rest & Recovery',
-    gradientColors: ['#B3E5FC', '#81D4FA', '#4FC3F7'],
+    gradientColors: ['#88C8F8', '#5898D0', '#3878B0'],
+    bgColor: LIGHT_THEME.cardBlue,
   },
   {
     id: '4',
     title: 'Anxiety Relief',
     subtitle: 'Coping',
-    gradientColors: ['#FFCCBC', '#FFAB91', '#FF8A65'],
+    gradientColors: ['#F0A888', '#D08868', '#B06848'],
+    bgColor: LIGHT_THEME.cardPeach,
   },
 ];
 
@@ -93,74 +99,57 @@ export default function ChatHomeScreen({
   };
 
   const renderTopicCard = ({ item }: { item: TopicCard }) => (
-    <TouchableOpacity
-      style={styles.topicCard}
+    <Pressable
+      style={[styles.topicCard, { backgroundColor: item.bgColor }]}
       onPress={() => onTopicPress?.(item)}
-      activeOpacity={0.8}
     >
       <View style={styles.orbContainer}>
         <GradientOrb colors={item.gradientColors} size={80} />
       </View>
       <Text style={styles.topicTitle}>{item.title}</Text>
       <Text style={styles.topicSubtitle}>{item.subtitle}</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 
   return (
-    <View style={styles.container}>
-      {/* Main Card */}
-      <View style={[styles.mainCard, { marginTop: insets.top + 20 }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.greeting}>Hi {username}</Text>
-          <TouchableOpacity style={styles.profileButton} onPress={onProfilePress}>
-            <Ionicons name="person-outline" size={22} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Topic Cards */}
-        <FlatList
-          data={TOPIC_CARDS}
-          renderItem={renderTopicCard}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.topicList}
-          snapToInterval={CARD_WIDTH + 12}
-          decelerationRate="fast"
-        />
-
-        {/* Input Bar */}
-        <View style={styles.inputContainer}>
-          <View style={styles.inputIconContainer}>
-            <Svg width={24} height={24} viewBox="0 0 24 24">
-              <Defs>
-                <RadialGradient id="inputGrad" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%" stopColor="#B3E5FC" />
-                  <Stop offset="100%" stopColor="#E1BEE7" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx="12" cy="12" r="10" fill="url(#inputGrad)" />
-            </Svg>
-          </View>
-          <TextInput
-            style={styles.input}
-            placeholder="Start typing..."
-            placeholderTextColor="#999"
-            value={inputText}
-            onChangeText={setInputText}
-            onSubmitEditing={handleSend}
-          />
-          <TouchableOpacity style={styles.micButton} onPress={onMicPress}>
-            <Ionicons name="mic-outline" size={22} color="#666" />
-          </TouchableOpacity>
-        </View>
+    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Hi {username}</Text>
+        <Pressable style={styles.profileButton} onPress={onProfilePress}>
+          <Ionicons name="person-outline" size={20} color={LIGHT_THEME.textSecondary} />
+        </Pressable>
       </View>
 
-      {/* Footer text */}
-      <Text style={styles.footerText}>
-        Empty AI chat canvas for new sessions.
-      </Text>
+      {/* Topic Cards */}
+      <FlatList
+        data={TOPIC_CARDS}
+        renderItem={renderTopicCard}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.topicList}
+        snapToInterval={CARD_WIDTH + 12}
+        decelerationRate="fast"
+      />
+
+      {/* Spacer */}
+      <View style={styles.spacer} />
+
+      {/* Input Bar */}
+      <View style={[styles.inputContainer, { marginBottom: 120 }]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Start typing..."
+          placeholderTextColor={LIGHT_THEME.textMuted}
+          value={inputText}
+          onChangeText={setInputText}
+          onSubmitEditing={handleSend}
+        />
+        <Pressable style={styles.micButton} onPress={onMicPress}>
+          <Ionicons name="mic-outline" size={22} color={LIGHT_THEME.textSecondary} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -168,99 +157,76 @@ export default function ChatHomeScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F7',
     paddingHorizontal: 20,
-  },
-  mainCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   greeting: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#E8A0A0',
+    fontSize: 28,
     fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textPrimary,
   },
   profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F7',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: LIGHT_THEME.surface,
     justifyContent: 'center',
     alignItems: 'center',
+    ...CARD_SHADOW,
   },
   topicList: {
-    paddingHorizontal: 20,
+    paddingRight: 20,
     gap: 12,
   },
   topicCard: {
     width: CARD_WIDTH,
-    backgroundColor: '#FAFAFA',
     borderRadius: 20,
     padding: 16,
-    marginRight: 12,
+    ...CARD_SHADOW,
   },
   orbContainer: {
     alignItems: 'center',
     marginBottom: 12,
   },
   topicTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 4,
+    fontSize: 17,
     fontFamily: 'Outfit-SemiBold',
+    color: LIGHT_THEME.textPrimary,
+    marginBottom: 4,
   },
   topicSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
     fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textSecondary,
+  },
+  spacer: {
+    flex: 1,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F7',
+    backgroundColor: LIGHT_THEME.surface,
     borderRadius: 25,
-    marginHorizontal: 20,
-    marginTop: 24,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  inputIconContainer: {
-    marginRight: 8,
+    ...CARD_SHADOW,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#1A1A1A',
-    paddingVertical: 8,
     fontFamily: 'Outfit-Regular',
+    color: LIGHT_THEME.textPrimary,
+    paddingVertical: 8,
   },
   micButton: {
     width: 36,
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    marginTop: 'auto',
-    marginBottom: 40,
-    fontFamily: 'Outfit-Regular',
   },
 });

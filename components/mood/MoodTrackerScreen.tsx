@@ -42,48 +42,48 @@ const MOODS: {
   {
     id: 'anxiety',
     label: 'Anxiety',
-    topColor: '#F5D93A',
-    bottomColor: '#2D8B57',
+    topColor: '#8B7A1E',
+    bottomColor: '#1A5234',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#F5D93A',
   },
   {
     id: 'distracted',
     label: 'Distracted',
-    topColor: '#E8D4F0',
-    bottomColor: '#8B5CF6',
+    topColor: '#6B4F7A',
+    bottomColor: '#5B3CA6',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#C4B5FD',
   },
   {
     id: 'joy',
     label: 'Joy',
-    topColor: '#F5B5C8',
-    bottomColor: '#E85D3B',
+    topColor: '#8B5060',
+    bottomColor: '#8B3723',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#FBBF24',
   },
   {
     id: 'surprised',
     label: 'Surprised',
-    topColor: '#FFF3CD',
-    bottomColor: '#FFB800',
+    topColor: '#8B8040',
+    bottomColor: '#8B6500',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#FCD34D',
   },
   {
     id: 'sad',
     label: 'Sad',
-    topColor: '#BFDBFE',
-    bottomColor: '#5B8DEF',
+    topColor: '#4A6B8B',
+    bottomColor: '#3558A0',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#93C5FD',
   },
   {
     id: 'calm',
     label: 'Calm',
-    topColor: '#A7F3D0',
-    bottomColor: '#14B8A6',
+    topColor: '#4A8B6B',
+    bottomColor: '#0D7068',
     buttonBg: 'rgba(255, 255, 255, 0.25)',
     selectedBg: '#5EEAD4',
   },
@@ -199,7 +199,7 @@ export const MoodTrackerScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
 
       {/* Top section with gradient effect */}
       <Animated.View style={[styles.topSection, topBackgroundStyle, { paddingTop: insets.top }]}>
@@ -232,7 +232,7 @@ export const MoodTrackerScreen: React.FC = () => {
           </View>
 
           {/* Mood buttons */}
-          <View style={[styles.moodButtonsContainer, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={[styles.moodButtonsContainer, { paddingBottom: insets.bottom + 100 }]}>
             <View style={styles.moodButtonsRow}>
               {MOODS.slice(0, 3).map((mood, index) => (
                 <MoodButton
@@ -280,13 +280,13 @@ const styles = StyleSheet.create({
   brandText: {
     fontFamily: 'Outfit-SemiBold',
     fontSize: 20,
-    color: '#1a1a1a',
+    color: '#FFFFFF',
   },
   menuButton: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
     margin: 1,
   },
   bottomSection: {
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   moodButtonTextSelected: {
-    color: '#1a1a1a',
+    color: '#1A1A1A',
   },
 });
 
