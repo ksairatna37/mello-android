@@ -76,7 +76,7 @@ const Dot = ({
   );
 };
 
-export default function TypingIndicator({ color = 'rgba(255, 255, 255, 0.9)' }: TypingIndicatorProps) {
+export default function TypingIndicator({ color = 'rgba(0, 0, 0, 0.9)' }: TypingIndicatorProps) {
   const breathScale = useSharedValue(1);
 
   useEffect(() => {
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: DOT_GAP,
     height: 24,
+    paddingLeft: 2,
   },
   dot: {
     width: DOT_SIZE,

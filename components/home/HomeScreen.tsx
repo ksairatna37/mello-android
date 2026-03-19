@@ -37,8 +37,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ZOOMED_AVATAR_SIZE = SCREEN_WIDTH * 0.6;
 
 import { LIGHT_THEME } from '@/components/common/LightGradient';
-import ThemedAuroraGradient, { AuroraThemeName } from '@/components/common/ThemedAuroraGradient';
-import DreamyGradient from '@/components/common/DreamyGradient';
+import MelloGradient from '@/components/common/MelloGradient';
 import HorizontalPager, { HorizontalPagerRef } from '@/components/common/HorizontalPager';
 import HomeTabSelector, { TabItem } from '@/components/home/HomeTabSelector';
 
@@ -49,16 +48,6 @@ import {
   MoodTidesPage,
   GentleSupportPage,
 } from '@/components/home/pages';
-
-// ═══════════════════════════════════════════════════════════════════
-// THEME CONFIGURATION
-// ═══════════════════════════════════════════════════════════════════
-// Aurora Dark:  'warmPink' | 'deepPurple' | 'coolTeal' | 'softLavender' | 'deepIndigo' | 'darkEmerald'
-// Aurora Light: 'softCream' | 'roseDawn' | 'oceanMist'
-// Special:      'dreamy' (animated floating clouds)
-type GradientTheme = AuroraThemeName | 'dreamy';
-const CURRENT_THEME: GradientTheme = 'lavenderMist';
-const LIGHT_THEMES: GradientTheme[] = ['softCream', 'roseDawn', 'oceanMist', 'lavenderMist', 'dreamy'];
 
 // ═══════════════════════════════════════════════════════════════════
 // TAB CONFIGURATION
@@ -139,16 +128,10 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* StatusBar */}
-      <StatusBar
-        barStyle={LIGHT_THEMES.includes(CURRENT_THEME) ? 'dark-content' : 'light-content'}
-      />
+      <StatusBar barStyle="dark-content" />
 
-      {/* Gradient Background */}
-      {CURRENT_THEME === 'dreamy' ? (
-        <DreamyGradient />
-      ) : (
-        <ThemedAuroraGradient theme={CURRENT_THEME as AuroraThemeName} />
-      )}
+      {/* Gradient Background — mello palette (lavender + sky blue + lilac) */}
+      <MelloGradient />
 
       {/* Header - Fixed at top */}
       <Animated.View

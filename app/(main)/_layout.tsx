@@ -2,45 +2,101 @@
  * Main App Tab Layout
  * Two-section design: rounded content card + dark tab bar surface
  *
- * Structure:
- *   ┌─────────────────────────┐
- *   │                         │
- *   │   Content Card          │  ← flex:1, rounded bottom corners
- *   │   (Tabs scenes)         │     overflow: hidden clips content
- *   │                         │
- *   └────╮               ╭───┘  ← borderBottomRadius visible
- *   ┌────┴───────────────┴───┐
- *   │       NAVBAR            │  ← flat dark surface
- *   └────────────────────────┘
- *
- *   Root background: #0D0D0D (dark) shows through rounded corners
+ * Fullscreen animation:
+ *   - Content card gets marginBottom: -tabBarHeight (one-time layout change)
+ *     making it extend underneath the tab bar area (z-order: tab bar on top)
+ *   - Tab bar fades + slides down via GPU (opacity + translateY, 250ms)
+ *   - As tab bar fades, content is revealed underneath — smooth reveal effect
+ *   - Returning: tab bar fades in, covering the content extension, then
+ *     marginBottom is removed
  */
 
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSyncExternalStore } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Tabs, usePathname } from 'expo-router';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import FloatingTabBar from '@/components/home/FloatingTabBar';
+import { fullscreenStore } from '@/utils/fullscreenStore';
 
 const CONTENT_RADIUS = 28;
 const FULL_SCREEN_ROUTES = new Set(['/breathing']);
+const ANIM_DURATION = 250;
+const ANIM_EASING = Easing.out(Easing.cubic);
+const ANIM_CONFIG = { duration: ANIM_DURATION, easing: ANIM_EASING };
 
 export default function MainLayout() {
   const pathname = usePathname();
-  const isFullScreen = FULL_SCREEN_ROUTES.has(pathname);
+  const isRouteFullScreen = FULL_SCREEN_ROUTES.has(pathname);
+  const isExternalFullScreen = useSyncExternalStore(
+    fullscreenStore.subscribe,
+    fullscreenStore.getSnapshot,
+  );
+  const isFullScreen = isRouteFullScreen || isExternalFullScreen;
+
+  // Measure tab bar height once via onLayout
+  const [tabBarHeight, setTabBarHeight] = useState(0);
+  const handleTabBarLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0) setTabBarHeight((prev) => (prev === h ? prev : h));
+  }, []);
+
+  // Skip animation on initial mount
+  const prevFullScreenRef = useRef(isFullScreen);
+
+  // GPU-only shared values
+  const tabBarTranslateY = useSharedValue(0);
+  const tabBarOpacity = useSharedValue(1);
+  const contentRadius = useSharedValue(CONTENT_RADIUS);
+
+  // GPU animation — tab bar slide + fade, border radius
+  useEffect(() => {
+    if (prevFullScreenRef.current === isFullScreen) return;
+    prevFullScreenRef.current = isFullScreen;
+
+    const H = tabBarHeight || 80;
+
+    if (isFullScreen) {
+      tabBarTranslateY.value = withTiming(H, ANIM_CONFIG);
+      tabBarOpacity.value = withTiming(0, ANIM_CONFIG);
+      contentRadius.value = withTiming(0, ANIM_CONFIG);
+    } else {
+      tabBarTranslateY.value = withTiming(0, ANIM_CONFIG);
+      tabBarOpacity.value = withTiming(1, ANIM_CONFIG);
+      contentRadius.value = withTiming(CONTENT_RADIUS, ANIM_CONFIG);
+    }
+  }, [isFullScreen]);
+
+  const contentCardStyle = useAnimatedStyle(() => ({
+    borderBottomLeftRadius: contentRadius.value,
+    borderBottomRightRadius: contentRadius.value,
+  }));
+
+  const tabBarAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: tabBarTranslateY.value }],
+    opacity: tabBarOpacity.value,
+  }));
 
   return (
     <View style={styles.root}>
-      {/* Section 1 — Content card with rounded bottom corners */}
-      <View
+      {/* Content card — when fullscreen, negative marginBottom makes it
+          extend underneath the tab bar. Tab bar (later sibling) is on top
+          via z-order, so the extension is hidden until tab bar fades out. */}
+      <Animated.View
         style={[
           styles.contentCard,
-          isFullScreen && styles.contentCardFull,
+          contentCardStyle,
+          isFullScreen && tabBarHeight > 0 && { marginBottom: -tabBarHeight },
         ]}
       >
         <Tabs
           tabBar={() => null}
-          screenOptions={{
-            headerShown: false,
-          }}
+          screenOptions={{ headerShown: false }}
         >
           <Tabs.Screen name="home" options={{ title: 'Home' }} />
           <Tabs.Screen name="call" options={{ title: 'Call' }} />
@@ -54,10 +110,19 @@ export default function MainLayout() {
           <Tabs.Screen name="journal" options={{ href: null }} />
           <Tabs.Screen name="breathing" options={{ href: null }} />
         </Tabs>
-      </View>
+      </Animated.View>
 
-      {/* Section 2 — Navbar (flat dark surface) */}
-      {!isFullScreen && <FloatingTabBar />}
+      {/* Tab bar — always in layout, GPU-only animation.
+          Z-order: on top of content card (later sibling).
+          pointerEvents: 'none' when hidden to prevent ghost taps. */}
+      <View onLayout={handleTabBarLayout}>
+        <Animated.View
+          style={tabBarAnimStyle}
+          pointerEvents={isFullScreen ? 'none' : 'auto'}
+        >
+          <FloatingTabBar />
+        </Animated.View>
+      </View>
     </View>
   );
 }
@@ -69,12 +134,6 @@ const styles = StyleSheet.create({
   },
   contentCard: {
     flex: 1,
-    borderBottomLeftRadius: CONTENT_RADIUS,
-    borderBottomRightRadius: CONTENT_RADIUS,
     overflow: 'hidden',
-  },
-  contentCardFull: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
   },
 });

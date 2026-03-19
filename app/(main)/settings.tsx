@@ -18,7 +18,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import LightGradient, { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
+import { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
+import MelloGradient from '@/components/common/MelloGradient';
 
 interface SettingsItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -116,7 +117,7 @@ export default function SettingsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <LightGradient variant="warm" />
+      <MelloGradient />
 
       <ScrollView
         style={styles.scrollView}

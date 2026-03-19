@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hume EVI Voice Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f13; color: #e8e8f0;
+      min-height: 100vh; display: flex;
+      flex-direction: column; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #1a1a24; border: 1px solid #2e2e42; border-radius: 20px;
+      padding: 40px; width: 100%; max-width: 560px;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+    h1 { font-size: 1.4rem; font-weight: 600; color: #c8b5ff; }
+    .subtitle { font-size: 0.82rem; color: #6b6b88; margin-top: 4px; }
+    .setup-panel { display: flex; flex-direction: column; gap: 10px; }
+    .setup-panel label { font-size: 0.78rem; color: #888; display: block; margin-bottom: 3px; }
+    .setup-panel input {
+      width: 100%; background: #13131d; border: 1px solid #2e2e42;
+      border-radius: 8px; padding: 10px 14px; color: #e8e8f0; font-size: 0.88rem; outline: none;
+    }
+    .setup-panel input:focus { border-color: #7c5cff; }
+    .divider { height: 1px; background: #2e2e42; }
+    .orb-wrapper { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .orb {
+      width: 110px; height: 110px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #7c5cff, #3d0099);
+      box-shadow: 0 0 24px rgba(124,92,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; user-select: none; transition: transform 0.15s ease;
+    }
+    .orb-icon { font-size: 2.2rem; pointer-events: none; }
+    .orb.connecting { opacity: 0.6; animation: glow 1.5s linear infinite; }
+    .orb.listening  { animation: pulse-listen 1.2s ease-in-out infinite; }
+    .orb.speaking   {
+      background: radial-gradient(circle at 35% 35%, #5cffb0, #007a44);
+      animation: pulse-speak 0.8s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 20px rgba(124,92,255,0.3); }
+      50%      { box-shadow: 0 0 40px rgba(124,92,255,0.6); }
+    }
+    @keyframes pulse-listen {
+      0%,100% { box-shadow: 0 0 20px rgba(124,92,255,0.4); transform: scale(1); }
+      50%      { box-shadow: 0 0 50px rgba(124,92,255,0.7); transform: scale(1.06); }
+    }
+    @keyframes pulse-speak {
+      0%,100% { box-shadow: 0 0 20px rgba(92,255,176,0.4); transform: scale(1); }
+      50%      { box-shadow: 0 0 60px rgba(92,255,176,0.8); transform: scale(1.1); }
+    }
+    .status-badge {
+      font-size: 0.75rem; font-weight: 600; padding: 4px 14px; border-radius: 20px;
+      background: #2a2a3e; color: #888; letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .status-badge.listening { background: #2a1e4a; color: #c8b5ff; }
+    .status-badge.speaking  { background: #1e3a2e; color: #5cffb0; }
+    .status-badge.error     { background: #3a1e1e; color: #ff6b6b; }
+    .controls { display: flex; gap: 10px; }
+    button {
+      flex: 1; padding: 12px 18px; border-radius: 12px; border: none;
+      font-size: 0.92rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease;
+    }
+    #btn-connect { background: #7c5cff; color: white; }
+    #btn-connect:hover { background: #9174ff; }
+    #btn-connect:disabled { background: #3a3a52; color: #666; cursor: not-allowed; }
+    #btn-end { background: #2e2e42; color: #ff6b6b; border: 1px solid #ff6b6b44; }
+    #btn-end:hover { background: #3a1e1e; }
+    #btn-end:disabled { opacity: 0.35; cursor: not-allowed; }
+    .transcript-box {
+      background: #13131d; border: 1px solid #2e2e42; border-radius: 12px;
+      padding: 14px; height: 200px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
+    }
+    .transcript-box::-webkit-scrollbar { width: 4px; }
+    .transcript-box::-webkit-scrollbar-thumb { background: #3a3a52; border-radius: 4px; }
+    .message { display: flex; flex-direction: column; gap: 3px; }
+    .message .role { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .message.user .role   { color: #c8b5ff; }
+    .message.ai .role     { color: #5cffb0; }
+    .message.system .role { color: #555; }
+    .message .text { font-size: 0.88rem; line-height: 1.5; color: #d0d0e0; }
+    .emotions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+    .emotion-chip { font-size: 0.7rem; padding: 2px 9px; background: #2a2a3e; border-radius: 20px; color: #a0a0c0; }
+    .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: #3a3a52; font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div>
+    <h1>🎙 Hume EVI Voice Test</h1>
+    <p class="subtitle">End-to-end test for your WhatsApp calling agent</p>
+  </div>
+
+  <div class="setup-panel">
+    <div>
+      <label>Hume API Key</label>
+      <input type="password" id="api-key" placeholder="hume_…" />
+    </div>
+    <div>
+      <label>Config ID <span style="color:#444">(optional)</span></label>
+      <input type="text" id="config-id" placeholder="Leave blank for default EVI config" />
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="orb-wrapper">
+    <div class="orb idle" id="orb"><span class="orb-icon">🎙</span></div>
+    <span class="status-badge" id="status-badge">IDLE</span>
+  </div>
+
+  <div class="controls">
+    <button id="btn-connect">Connect &amp; Start</button>
+    <button id="btn-end" disabled>End Call</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="transcript-box" id="transcript">
+    <div class="empty-state">Transcript will appear here…</div>
+  </div>
+</div>
+
+<script>
+  let ws            = null;
+  let mediaRecorder = null;
+  let micStream     = null;
+  let audioContext  = null;
+  let audioQueue    = [];
+  let isPlaying     = false;
+  let eviSpeaking   = false;
+
+  const orb        = document.getElementById('orb');
+  const badge      = document.getElementById('status-badge');
+  const transcript = document.getElementById('transcript');
+  const btnConnect = document.getElementById('btn-connect');
+  const btnEnd     = document.getElementById('btn-end');
+  const apiInput   = document.getElementById('api-key');
+  const cfgInput   = document.getElementById('config-id');
+
+  fetch('/get-hume-token').then(r => r.json()).then(d => {
+    if (d.api_key)   apiInput.value = d.api_key;
+    if (d.config_id) cfgInput.value = d.config_id;
+  }).catch(() => {});
+
+  function setStatus(state, label) {
+    orb.className = `orb ${state}`;
+    badge.className = `status-badge ${state}`;
+    badge.textContent = label;
+  }
+
+  function addMsg(role, text, emotions = []) {
+    document.querySelector('.empty-state')?.remove();
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+    const roleEl = document.createElement('div');
+    roleEl.className = 'role';
+    roleEl.textContent = role === 'ai' ? 'EVI' : role;
+    const textEl = document.createElement('div');
+    textEl.className = 'text';
+    textEl.textContent = text;
+    div.appendChild(roleEl);
+    div.appendChild(textEl);
+    if (emotions.length) {
+      const em = document.createElement('div');
+      em.className = 'emotions';
+      emotions.forEach(e => {
+        const c = document.createElement('span');
+        c.className = 'emotion-chip';
+        c.textContent = `${e.name} ${(e.score*100).toFixed(0)}%`;
+        em.appendChild(c);
+      });
+      div.appendChild(em);
+    }
+    transcript.appendChild(div);
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  // ── Audio playback ────────────────────────
+  async function enqueueAudio(b64) {
+    if (!audioContext) audioContext = new AudioContext();
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    try {
+      const buf = await audioContext.decodeAudioData(bytes.buffer);
+      audioQueue.push(buf);
+      if (!isPlaying) playNext();
+    } catch(e) { console.warn('Audio decode error:', e); }
+  }
+
+  function playNext() {
+    if (!audioQueue.length) {
+      isPlaying   = false;
+      eviSpeaking = false;
+      setStatus('listening', 'LISTENING');
+      resumeMic();
+      return;
+    }
+    isPlaying   = true;
+    eviSpeaking = true;
+    const src = audioContext.createBufferSource();
+    src.buffer = audioQueue.shift();
+    src.connect(audioContext.destination);
+    src.onended = playNext;
+    src.start();
+  }
+
+  // ── Connect to Hume EVI ───────────────────
+  function connect() {
+    const apiKey   = apiInput.value.trim();
+    const configId = cfgInput.value.trim();
+    if (!apiKey) { alert('Please enter your Hume API key.'); return; }
+
+    setStatus('connecting', 'CONNECTING…');
+    btnConnect.disabled = true;
+
+    let url = `wss://api.hume.ai/v0/evi/chat?api_key=${encodeURIComponent(apiKey)}&evi_version=3`;
+    if (configId) url += `&config_id=${encodeURIComponent(configId)}`;
+
+    ws = new WebSocket(url);
+
+    ws.onopen = async () => {
+      addMsg('system', 'Connected to Hume EVI — start speaking!');
+      setStatus('listening', 'LISTENING');
+      btnEnd.disabled = false;
+      await startMic();
+    };
+
+    ws.onmessage = ({ data }) => {
+      try { handleMsg(JSON.parse(data)); } catch(e) { console.error(e); }
+    };
+
+    ws.onerror = () => {
+      addMsg('system', 'WebSocket error — check your API key and try again.');
+      setStatus('error', 'ERROR');
+      btnConnect.disabled = false;
+    };
+
+    ws.onclose = () => {
+      addMsg('system', 'Session ended.');
+      setStatus('idle', 'IDLE');
+      stopMic();
+      btnConnect.disabled = false;
+      btnEnd.disabled = true;
+    };
+  }
+
+  function handleMsg(msg) {
+    switch (msg.type) {
+      case 'chat_metadata':
+        addMsg('system', `Session ID: ${msg.chat_id}`);
+        break;
+      case 'user_message': {
+        const text   = msg.message?.content ?? '';
+        const scores = msg.models?.prosody?.scores ?? {};
+        const top3   = Object.entries(scores).sort((a,b) => b[1]-a[1]).slice(0,3)
+                         .map(([name,score]) => ({name,score}));
+        if (text) addMsg('user', text, top3);
+        break;
+      }
+      case 'assistant_message': {
+        const text = msg.message?.content ?? '';
+        if (text) addMsg('ai', text);
+        setStatus('speaking', 'EVI SPEAKING');
+        pauseMic();
+        break;
+      }
+      case 'audio_output':
+        enqueueAudio(msg.data);
+        break;
+      case 'assistant_end':
+        // queue will drain and call resumeMic() via playNext()
+        break;
+      case 'user_interruption':
+        audioQueue = []; isPlaying = false; eviSpeaking = false;
+        setStatus('listening', 'LISTENING');
+        resumeMic();
+        break;
+      case 'error':
+        addMsg('system', `Error: ${msg.message}`);
+        setStatus('error', 'ERROR');
+        break;
+    }
+  }
+
+  // ── Microphone via MediaRecorder (WebM) ───
+  async function startMic() {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch(e) {
+      addMsg('system', `Mic error: ${e.message} — allow microphone access and retry.`);
+      return;
+    }
+
+    // Use WebM (opus) — Hume accepts it natively, no raw PCM needed
+    const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+    mediaRecorder = new MediaRecorder(micStream, mime ? { mimeType: mime } : {});
+
+    mediaRecorder.ondataavailable = async ({ data }) => {
+      if (!data || data.size === 0) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (eviSpeaking) return; // suppress echo while EVI is speaking
+      const b64 = await blobToBase64(data);
+      ws.send(JSON.stringify({ type: 'audio_input', data: b64 }));
+    };
+
+    mediaRecorder.start(100); // chunk every 100ms
+  }
+
+  function pauseMic()  {
+    if (mediaRecorder?.state === 'recording') mediaRecorder.pause();
+  }
+  function resumeMic() {
+    if (mediaRecorder?.state === 'paused') mediaRecorder.resume();
+  }
+  function stopMic() {
+    mediaRecorder?.stop();
+    micStream?.getTracks().forEach(t => t.stop());
+    mediaRecorder = null; micStream = null;
+    audioQueue = []; isPlaying = false; eviSpeaking = false;
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload  = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  btnConnect.addEventListener('click', connect);
+  btnEnd.addEventListener('click', () => { ws?.close(); stopMic(); });
+</script>
+</body>
+</html>

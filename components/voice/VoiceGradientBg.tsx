@@ -46,10 +46,11 @@ interface VoiceGradientBgProps {
 
 // Color palettes
 const WARM_BG = '#FFF8F2';
+// const COOL_BG = '#F2F0FF';
 const COOL_BG = '#F2F0FF';
 
 const WARM_COLORS = ['#FFB8B8', '#FFDAB9', '#FFC5A8'] as const; // pink, peach, coral
-const COOL_COLORS = ['#b9a6ff', '#A8D8FF', '#D4C8FF'] as const; // lavender, sky blue, lilac
+const COOL_COLORS = ['#fccfff', '#c1e3ff', '#D4C8FF'] as const; // lavender, sky blue, lilac
 
 // Blob positions (fractional screen coords)
 const BLOBS = [

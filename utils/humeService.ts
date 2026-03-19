@@ -101,21 +101,25 @@ export class HumeEVIService {
       try {
         // Build WebSocket URL with auth params
         const url = `${HUME_WS_URL}?config_id=${this.configId}&api_key=${this.apiKey}`;
+        console.log('[HumeService] Connecting to:', HUME_WS_URL, 'configId:', this.configId);
         const ws = new WebSocket(url);
 
         ws.onopen = () => {
+          console.log('[HumeService] WebSocket OPEN');
           this._isConnected = true;
           this.socket = ws;
 
           // Send session settings for linear PCM audio
-          this.sendJSON({
+          const settings = {
             type: 'session_settings',
             audio: {
               encoding: 'linear16',
               sample_rate: this.sampleRate,
               channels: 1,
             },
-          });
+          };
+          console.log('[HumeService] Sending session_settings:', JSON.stringify(settings));
+          this.sendJSON(settings);
 
           resolve();
         };
@@ -129,7 +133,8 @@ export class HumeEVIService {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event: any) => {
+          console.log('[HumeService] WebSocket CLOSED, code:', event?.code, 'reason:', event?.reason);
           this._isConnected = false;
           this.socket = null;
           this.callbacks.onDisconnected();
@@ -137,6 +142,7 @@ export class HumeEVIService {
 
         ws.onerror = (err: Event) => {
           const errorMsg = (err as any)?.message || 'WebSocket error';
+          console.error('[HumeService] WebSocket ERROR:', errorMsg);
           this.callbacks.onError(errorMsg);
           if (!this._isConnected) {
             reject(new Error(errorMsg));
@@ -160,8 +166,14 @@ export class HumeEVIService {
     this._isConnected = false;
   }
 
+  private audioSendCount = 0;
+
   sendAudio(base64Data: string): void {
     if (!this.socket || !this._isConnected) return;
+    this.audioSendCount++;
+    if (this.audioSendCount % 100 === 1) {
+      console.log(`[HumeService] >> audio_input #${this.audioSendCount} (${base64Data.length} chars)`);
+    }
     this.sendJSON({
       type: 'audio_input',
       data: base64Data,
@@ -183,6 +195,7 @@ export class HumeEVIService {
 
   private handleMessage(msg: any): void {
     if (!msg || !msg.type) return;
+    console.log('[HumeService] <<', msg.type, msg.type === 'audio_output' ? `(${msg.data?.length || 0} chars)` : '');
 
     switch (msg.type) {
       case 'chat_metadata': {

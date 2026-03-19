@@ -6,13 +6,13 @@
 import React from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import ChatScreen from '@/components/chat/ChatScreen';
-import LightGradient from '@/components/common/LightGradient';
+import MelloGradient from '@/components/common/MelloGradient';
 
 export default function ChatTab() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <LightGradient variant="warm" />
+      <MelloGradient />
       <ChatScreen />
     </View>
   );
