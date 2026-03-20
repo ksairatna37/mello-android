@@ -31,13 +31,17 @@ import {
 } from '@react-native-google-signin/google-signin';
 import { supabase } from '@/lib/supabase';
 
-// Google Web Client ID - Required for Supabase auth
-// Get this from Google Cloud Console -> Credentials -> OAuth 2.0 Client IDs -> Web client
+// Google OAuth Client IDs
+// Get these from Google Cloud Console -> Credentials -> OAuth 2.0 Client IDs
 const GOOGLE_WEB_CLIENT_ID = '499732705533-9lmeh4ah0rvbb6f6dirtudmf6gts7avb.apps.googleusercontent.com';
+
+// iOS Client ID - From Google Cloud Console (Bundle ID: health.melloai.app)
+const GOOGLE_IOS_CLIENT_ID = '499732705533-ot31akqnmvgvona2a89j2dbhfle7a2om.apps.googleusercontent.com';
 
 // Configure Google Sign-In
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
+  iosClientId: GOOGLE_IOS_CLIENT_ID,
   offlineAccess: true,
   scopes: ['profile', 'email'],
 });
