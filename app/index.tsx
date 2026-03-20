@@ -40,18 +40,16 @@ export default function Index() {
       // Not logged in → go to welcome
       console.log('>>> Index: No user, going to welcome');
       setDestination('/(onboarding)/welcome');
-    } else if (profile === null) {
-      // Profile still loading, wait for it
-      console.log('>>> Index: Waiting for profile to load...');
-      return;
     } else if (profile?.first_login === true) {
       // Logged in + completed onboarding → go to main
       console.log('>>> Index: User completed onboarding, going to main');
       setDestination('/(main)/chat');
     } else {
-      // Logged in but onboarding incomplete → resume onboarding
-      // For now, start from name-input (after email verification)
-      console.log('>>> Index: User needs to complete onboarding');
+      // Logged in but:
+      // - profile is null (new user, no profile row yet), OR
+      // - profile.first_login is false (onboarding incomplete)
+      // → go to onboarding
+      console.log('>>> Index: User needs to complete onboarding (profile:', profile, ')');
       setDestination('/(onboarding-new)/name-input');
     }
   }, [initialized, loading, user, profile]);

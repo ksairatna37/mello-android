@@ -156,20 +156,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Update profile data for new users
+   * Create or update profile data for new users (UPSERT)
    */
   const updateProfileData = useCallback(async (user: User) => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id, // Required for upsert to match existing row
           email_id: user.email,
           first_login: false, // Will become true after onboarding
-        })
-        .eq('id', user.id);
+          username: user.user_metadata?.full_name || user.user_metadata?.name || null,
+          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+        }, {
+          onConflict: 'id', // If id exists, update; otherwise insert
+        });
 
       if (error) {
-        console.error('Error updating profile:', error);
+        console.error('Error upserting profile:', error);
       }
     } catch (error) {
       console.error('Error updating profile:', error);
