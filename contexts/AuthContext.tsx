@@ -21,6 +21,7 @@ import React, {
   ReactNode,
   useCallback,
 } from 'react';
+import { Platform } from 'react-native';
 import { User, Session } from '@supabase/supabase-js';
 import { useRouter } from 'expo-router';
 import {
@@ -29,6 +30,7 @@ import {
   isErrorWithCode,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
 
 // Google OAuth Client IDs
@@ -38,7 +40,23 @@ const GOOGLE_WEB_CLIENT_ID = '499732705533-9lmeh4ah0rvbb6f6dirtudmf6gts7avb.apps
 // iOS Client ID - From Google Cloud Console (Bundle ID: health.melloai.app)
 const GOOGLE_IOS_CLIENT_ID = '499732705533-ot31akqnmvgvona2a89j2dbhfle7a2om.apps.googleusercontent.com';
 
-// Configure Google Sign-In
+/**
+ * Generate a random nonce for iOS Google Sign-In
+ * Returns both raw nonce (for Supabase) and hashed nonce (for Google)
+ */
+async function generateNonce(): Promise<{ raw: string; hashed: string }> {
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce
+  );
+  return { raw: rawNonce, hashed: hashedNonce };
+}
+
+// Store the current nonce for iOS sign-in
+let currentNonce: string | null = null;
+
+// Configure Google Sign-In (will be reconfigured on iOS before each sign-in)
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
   iosClientId: GOOGLE_IOS_CLIENT_ID,
@@ -222,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Sign in with Native Google Sign-In (in-app popup)
+   * iOS requires nonce to be generated and passed to both Google and Supabase
    */
   const signInWithGoogle = useCallback(async () => {
     console.log('=== NATIVE GOOGLE SIGN IN STARTED ===');
@@ -231,6 +250,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if Google Play Services are available
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       console.log('1. Google Play Services available');
+
+      // On iOS, generate nonce and reconfigure Google Sign-In
+      if (Platform.OS === 'ios') {
+        console.log('1.5. iOS detected - generating nonce...');
+        const { raw, hashed } = await generateNonce();
+        currentNonce = raw;
+
+        // Reconfigure with nonce for this sign-in attempt
+        GoogleSignin.configure({
+          webClientId: GOOGLE_WEB_CLIENT_ID,
+          iosClientId: GOOGLE_IOS_CLIENT_ID,
+          offlineAccess: true,
+          scopes: ['profile', 'email'],
+          nonce: hashed, // Pass hashed nonce to Google
+        });
+        console.log('1.6. Google Sign-In reconfigured with nonce');
+      }
 
       // Sign in with Google (shows native popup)
       console.log('2. Opening Google Sign-In popup...');
@@ -246,11 +282,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Sign in to Supabase with Google ID token
+        // On iOS, pass the raw nonce we generated earlier
         console.log('5. Signing in to Supabase with ID token...');
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
+          ...(Platform.OS === 'ios' && currentNonce && { nonce: currentNonce }),
         });
+
+        // Clear nonce after use
+        currentNonce = null;
 
         if (error) {
           console.error('6. Supabase sign-in error:', error);
@@ -261,9 +302,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Navigation will be handled by onAuthStateChange listener
       } else {
         console.log('4. Sign-in was cancelled or failed');
+        currentNonce = null;
       }
     } catch (error: any) {
       console.error('Google sign-in error:', error);
+      currentNonce = null;
 
       if (isErrorWithCode(error)) {
         switch (error.code) {
