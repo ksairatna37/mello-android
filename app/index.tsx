@@ -14,7 +14,7 @@ import { Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 // DEV MODE: Set to true to skip onboarding and go directly to Get Rolling
-const DEV_SKIP_TO_GET_ROLLING = true;
+const DEV_SKIP_TO_GET_ROLLING = false;
 
 export default function Index() {
   const { user, profile, initialized, loading } = useAuth();
