@@ -15,6 +15,7 @@ import {
   StyleSheet,
   FlatList,
   Dimensions,
+  Image,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import FadingScrollWrapper from '@/components/get-rolling/ScrollFadeEdges';
 
 import { Buffer } from 'buffer';
+import { Audio } from 'expo-av';
 import { HumeEVIService, EmotionScores } from '@/utils/humeService';
 import MelloGradient from '@/components/common/MelloGradient';
 import CrisisInlineWarning from './CrisisInlineWarning';
@@ -30,6 +32,15 @@ import { LIGHT_THEME } from '@/components/common/LightGradient';
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { fullscreenStore } from '@/utils/fullscreenStore';
 import TranscriptIcon from './TranscriptIcon';
+import HindiVoiceScreen from './HindiVoiceScreen';
+import InterventionIndicator from './InterventionIndicator';
+import {
+  detectIntervention,
+  getInitialInterventionDetectorState,
+  isHighPriorityIntervention,
+  type InterventionDecision,
+  type InterventionDetectorState,
+} from '@/utils/interventions';
 
 // Lazy-load NativeAudio
 let NativeAudio: any = null;
@@ -58,33 +69,8 @@ type ChatMessage = {
 const HUME_API_KEY = process.env.EXPO_PUBLIC_HUME_API_KEY || '';
 const HUME_DEFAULT_CONFIG_ID = process.env.EXPO_PUBLIC_HUME_CONFIG_ID || '';
 
-type VoiceOption = {
-  id: string;
-  label: string;
-  subtitle: string;
-  configId: string;
-};
-
-const VOICE_OPTIONS: VoiceOption[] = [
-  {
-    id: 'expressive-girl',
-    label: 'Expressive Girl',
-    subtitle: 'English',
-    configId: HUME_DEFAULT_CONFIG_ID,
-  },
-  {
-    id: 'priya',
-    label: 'Priya',
-    subtitle: 'Hindi',
-    configId: 'c23b7a0d-d006-48a4-b88b-c1516098202e',
-  },
-  {
-    id: 'indian-actress',
-    label: 'Indian Actress',
-    subtitle: 'English, Indian accent',
-    configId: '711166ca-e267-43ed-a8c0-b725164e48cf',
-  },
-];
+// Language options: English (Hume) or Hindi (LiveKit + Sarvam)
+type VoiceLanguage = 'english' | 'hindi';
 
 // ═══════════════════════════════════════════════════
 // DEV MODE — set to true to skip Hume and use fake transcript
@@ -206,7 +192,8 @@ export default function VoiceAgentScreen() {
 
   // Call state
   const [callState, setCallState] = useState<CallState>('idle');
-  const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VOICE_OPTIONS[0]);
+  const [selectedLanguage, setSelectedLanguage] = useState<VoiceLanguage>('english');
+  const [showHindiScreen, setShowHindiScreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showCrisisWarning, setShowCrisisWarning] = useState(false);
 
@@ -230,6 +217,13 @@ export default function VoiceAgentScreen() {
   const isMutedRef = useRef(false);
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animatedIdsRef = useRef<Set<string>>(new Set());
+
+  // Intervention system state (inline per plan)
+  const [currentIntervention, setCurrentIntervention] = useState<InterventionDecision | null>(null);
+  const currentInterventionRef = useRef<InterventionDecision | null>(null); // For use in callbacks
+  const detectorStateRef = useRef<InterventionDetectorState>(getInitialInterventionDetectorState());
+  const lastSentTypeRef = useRef<string | null>(null);
+  const ttlTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Gradient speaker ──
   const gradientSpeaker = useMemo(() => {
@@ -264,10 +258,11 @@ export default function VoiceAgentScreen() {
         <CrisisInlineWarning
           onConnect={handleCrisisConnect}
           onDismiss={() => setShowCrisisWarning(false)}
+          autoExpand={currentIntervention !== null && isHighPriorityIntervention(currentIntervention.type)}
         />
       )}
     </>
-  ), [isWaitingForResponse, showCrisisWarning, handleCrisisConnect]);
+  ), [isWaitingForResponse, showCrisisWarning, handleCrisisConnect, currentIntervention]);
 
   // Memoized renderItem — tracks animated IDs via ref (no re-renders)
   const renderChatItem = useCallback(({ item }: { item: ChatMessage }) => {
@@ -290,12 +285,45 @@ export default function VoiceAgentScreen() {
       const newId = `msg-${++msgIdCounter}`;
       setMessages((prev) => [...prev, { id: newId, role: 'user', text }]);
 
-      // Crisis detection
+      // Run intervention detection
+      const humeMessage = {
+        type: 'user_message',
+        message: { content: text },
+        models: { prosody: { scores: emotions.raw } },
+      };
+
+      console.log('[Intervention] Running detection on:', text.substring(0, 50));
+      const nextIntervention = detectIntervention(
+        humeMessage,
+        detectorStateRef.current,
+        Date.now(),
+      );
+
+      if (nextIntervention) {
+        console.log('[Intervention] Detected:', nextIntervention.type, 'priority:', nextIntervention.priority);
+        // Check priority - only override if same or higher priority (use ref for current value)
+        const currentPriority = currentInterventionRef.current?.priority ?? -1;
+        if (nextIntervention.priority >= currentPriority) {
+          currentInterventionRef.current = nextIntervention;
+          setCurrentIntervention(nextIntervention);
+          detectorStateRef.current.lastDecisionType = nextIntervention.type;
+          detectorStateRef.current.lastDecisionAt = Date.now();
+        }
+      } else {
+        console.log('[Intervention] No intervention detected');
+      }
+
+      // Crisis detection (keep for call/text button UI)
       const hasCrisisKeyword = detectCrisis(text);
       const hasHighDistress = emotions.top3.some(
         (e) => DISTRESS_EMOTIONS.includes(e.name) && e.score > DISTRESS_THRESHOLD,
       );
-      if (hasCrisisKeyword || hasHighDistress) {
+      // Show crisis warning for high-priority interventions OR existing crisis detection
+      if (
+        (nextIntervention && isHighPriorityIntervention(nextIntervention.type)) ||
+        hasCrisisKeyword ||
+        hasHighDistress
+      ) {
         setShowCrisisWarning(true);
       }
     },
@@ -347,6 +375,38 @@ export default function VoiceAgentScreen() {
       console.error('[Hume] error:', error);
     },
   }), []);
+
+  // ═══════════════════════════════════════════════════
+  // INTERVENTION COORDINATOR
+  // ═══════════════════════════════════════════════════
+
+  // Send intervention guidance to Hume when intervention changes
+  useEffect(() => {
+    if (callState !== 'active' || !humeServiceRef.current) return;
+
+    if (currentIntervention && lastSentTypeRef.current !== currentIntervention.type) {
+      // Send guidance to Hume
+      console.log('[Intervention] Sending guidance to Hume:', currentIntervention.type);
+      humeServiceRef.current.sendSessionSettings({
+        intervention_guidance: currentIntervention.guidance,
+      });
+      lastSentTypeRef.current = currentIntervention.type;
+
+      // Set TTL timeout to clear intervention
+      if (ttlTimeoutRef.current) clearTimeout(ttlTimeoutRef.current);
+      ttlTimeoutRef.current = setTimeout(() => {
+        console.log('[Intervention] TTL expired, clearing guidance');
+        humeServiceRef.current?.sendSessionSettings({ intervention_guidance: '' });
+        currentInterventionRef.current = null;
+        setCurrentIntervention(null);
+        lastSentTypeRef.current = null;
+      }, currentIntervention.ttlMs);
+    } else if (!currentIntervention && lastSentTypeRef.current) {
+      // Clear guidance
+      humeServiceRef.current.sendSessionSettings({ intervention_guidance: '' });
+      lastSentTypeRef.current = null;
+    }
+  }, [currentIntervention, callState]);
 
   // ═══════════════════════════════════════════════════
   // CALL HANDLERS
@@ -401,13 +461,21 @@ export default function VoiceAgentScreen() {
   }, []);
 
   const handleStartCall = useCallback(async () => {
-    console.log(`[Mello] === Starting call with voice: ${selectedVoice.label} ===`);
+    // ── Hindi: use LiveKit + Sarvam ──
+    if (selectedLanguage === 'hindi') {
+      console.log('[Mello] === Starting Hindi voice (LiveKit + Sarvam) ===');
+      setShowHindiScreen(true);
+      return;
+    }
+
+    // ── English: use Hume EVI ──
+    console.log('[Mello] === Starting call with English voice (Hume) ===');
     setCallState('connecting');
     setMessages([]);
     setShowCrisisWarning(false);
     setIsUserSpeaking(false);
     setIsWaitingForResponse(false);
-    setShowTranscript(false);
+    setShowTranscript(true);  // Show transcript by default
     assistantSpeakingRef.current = false;
     msgIdCounter = 0;
     animatedIdsRef.current.clear();
@@ -419,24 +487,49 @@ export default function VoiceAgentScreen() {
     }
 
     // ── PRODUCTION: connect to Hume EVI ──
-    if (!HUME_API_KEY || !selectedVoice.configId) {
+    if (!HUME_API_KEY || !HUME_DEFAULT_CONFIG_ID) {
       console.error('[Mello] Hume API key or config ID not set');
       return;
     }
 
     try {
-      if (NativeAudio) {
-        const granted = await NativeAudio.getPermissions();
-        if (!granted) { setCallState('idle'); return; }
+      console.log('[Mello] NativeAudio available:', !!NativeAudio);
+
+      // Request microphone permission using expo-av
+      console.log('[Mello] Requesting audio permissions...');
+      const { granted } = await Audio.requestPermissionsAsync();
+      console.log('[Mello] Permissions granted:', granted);
+      if (!granted) {
+        console.warn('[Mello] Audio permissions denied, returning to idle');
+        setCallState('idle');
+        return;
       }
 
+      if (!NativeAudio) {
+        console.warn('[Mello] NativeAudio not available - run npx expo prebuild first');
+        setCallState('idle');
+        return;
+      }
+
+      // Configure audio mode for voice chat
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      console.log('[Mello] Connecting to Hume EVI...');
       const service = new HumeEVIService(
         HUME_API_KEY,
-        selectedVoice.configId,
+        HUME_DEFAULT_CONFIG_ID,
         humeCallbacks,
       );
       humeServiceRef.current = service;
       await service.connect();
+      console.log('[Mello] Hume WebSocket connected!');
+
+      // Initialize intervention_guidance variable (required by Hume config)
+      service.sendSessionSettings({ intervention_guidance: '' });
 
       if (NativeAudio) {
         let audioChunkCount = 0;
@@ -480,39 +573,79 @@ export default function VoiceAgentScreen() {
       console.error('[Mello] Failed to start call:', err);
       setCallState('idle');
     }
-  }, [humeCallbacks, selectedVoice, startDevConversation]);
+  }, [humeCallbacks, selectedLanguage, startDevConversation]);
 
   const handleEndCall = useCallback(async () => {
     console.log('[Mello] === Ending call ===');
 
-    // Clear dev timers
-    devTimersRef.current.forEach(clearTimeout);
-    devTimersRef.current = [];
+    try {
+      // Clear dev timers
+      devTimersRef.current.forEach(clearTimeout);
+      devTimersRef.current = [];
 
-    if (!DEV_MODE && NativeAudio) {
-      try {
-        await NativeAudio.stopPlayback();
-        await NativeAudio.unmute();
-        await NativeAudio.stopRecording();
-      } catch (err) {
-        console.warn('[Mello] Error stopping audio:', err);
+      // Stop audio - wrap each call individually to prevent cascade failures
+      if (!DEV_MODE && NativeAudio) {
+        try {
+          await NativeAudio.stopPlayback().catch(() => {});
+        } catch (err) {
+          console.warn('[Mello] Error stopping playback:', err);
+        }
+        try {
+          await NativeAudio.unmute().catch(() => {});
+        } catch (err) {
+          console.warn('[Mello] Error unmuting:', err);
+        }
+        try {
+          await NativeAudio.stopRecording().catch(() => {});
+        } catch (err) {
+          console.warn('[Mello] Error stopping recording:', err);
+        }
       }
+
+      // Remove listeners safely
+      try {
+        audioListenerRef.current?.remove();
+      } catch (err) {
+        console.warn('[Mello] Error removing audio listener:', err);
+      }
+      audioListenerRef.current = null;
+
+      try {
+        playbackCompleteListenerRef.current?.remove();
+      } catch (err) {
+        console.warn('[Mello] Error removing playback listener:', err);
+      }
+      playbackCompleteListenerRef.current = null;
+
+      // Disconnect Hume safely
+      try {
+        humeServiceRef.current?.disconnect();
+      } catch (err) {
+        console.warn('[Mello] Error disconnecting Hume:', err);
+      }
+      humeServiceRef.current = null;
+
+      // Clear timeouts
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      if (ttlTimeoutRef.current) clearTimeout(ttlTimeoutRef.current);
+
+      // Clear intervention state
+      currentInterventionRef.current = null;
+      detectorStateRef.current = getInitialInterventionDetectorState();
+      lastSentTypeRef.current = null;
+
+    } catch (err) {
+      console.error('[Mello] Error in handleEndCall:', err);
+    } finally {
+      // Always update state even if cleanup fails
+      setCallState('ended');
+      setIsAssistantSpeaking(false);
+      setIsUserSpeaking(false);
+      setIsWaitingForResponse(false);
+      setIsFullscreen(false);
+      assistantSpeakingRef.current = false;
+      setCurrentIntervention(null);
     }
-
-    audioListenerRef.current?.remove();
-    audioListenerRef.current = null;
-    playbackCompleteListenerRef.current?.remove();
-    playbackCompleteListenerRef.current = null;
-    humeServiceRef.current?.disconnect();
-    humeServiceRef.current = null;
-
-    setCallState('ended');
-    setIsAssistantSpeaking(false);
-    setIsUserSpeaking(false);
-    setIsWaitingForResponse(false);
-    setIsFullscreen(false);
-    assistantSpeakingRef.current = false;
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
   }, []);
 
   const handleNewCall = useCallback(() => {
@@ -521,6 +654,10 @@ export default function VoiceAgentScreen() {
     setShowCrisisWarning(false);
     setShowTranscript(false);
     setIsFullscreen(false);
+  }, []);
+
+  const handleHindiBack = useCallback(() => {
+    setShowHindiScreen(false);
   }, []);
 
   const handleToggleMute = useCallback(async () => {
@@ -555,15 +692,20 @@ export default function VoiceAgentScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      fullscreenStore.set(false);
-      devTimersRef.current.forEach(clearTimeout);
-      audioListenerRef.current?.remove();
-      playbackCompleteListenerRef.current?.remove();
-      humeServiceRef.current?.disconnect();
-      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-      if (NativeAudio) {
-        NativeAudio.stopPlayback().catch(() => { });
-        NativeAudio.stopRecording().catch(() => { });
+      try {
+        fullscreenStore.set(false);
+        devTimersRef.current.forEach(clearTimeout);
+        try { audioListenerRef.current?.remove(); } catch (e) { /* ignore */ }
+        try { playbackCompleteListenerRef.current?.remove(); } catch (e) { /* ignore */ }
+        try { humeServiceRef.current?.disconnect(); } catch (e) { /* ignore */ }
+        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        if (ttlTimeoutRef.current) clearTimeout(ttlTimeoutRef.current);
+        if (NativeAudio) {
+          NativeAudio.stopPlayback().catch(() => { });
+          NativeAudio.stopRecording().catch(() => { });
+        }
+      } catch (err) {
+        console.warn('[Mello] Cleanup error:', err);
       }
     };
   }, []);
@@ -575,13 +717,11 @@ export default function VoiceAgentScreen() {
   // Avatar placeholder (when transcript is hidden or idle)
   const renderAvatarPlaceholder = () => (
     <View style={styles.avatarContainer}>
-      {callState === 'active' && isAssistantSpeaking && (
-        <Animated.View entering={FadeIn.duration(300)} style={styles.speakingIndicatorRow}>
-          <TypingIndicator color="rgb(0, 0, 0)" />
-        </Animated.View>
-      )}
       <View style={styles.avatarCircle}>
-        <Ionicons name="sparkles" size={40} color={LIGHT_THEME.accent} />
+        <Image
+          source={require('@/assets/mello-mascot.png')}
+          style={styles.mascotImage}
+        />
       </View>
       {callState === 'active' && (
         <Text style={styles.avatarStatusText}>
@@ -599,47 +739,62 @@ export default function VoiceAgentScreen() {
     </View>
   );
 
-  // Idle screen — voice selector
+  // Idle screen — language selector (English or Hindi)
   const renderIdleScreen = () => (
     <View style={styles.idleContainer}>
       <View style={styles.avatarCircle}>
-        <Ionicons name="sparkles" size={40} color={LIGHT_THEME.accent} />
+        <Image
+          source={require('@/assets/mello-mascot.png')}
+          style={styles.mascotImage}
+        />
       </View>
       <Text style={styles.idleTitle}>talk to mello</Text>
       <View style={styles.voiceSelector}>
-        <Text style={styles.voiceSelectorLabel}>voice</Text>
+        <Text style={styles.voiceSelectorLabel}>language</Text>
         <View style={styles.voiceChips}>
-          {VOICE_OPTIONS.map((voice) => (
-            <Pressable
-              key={voice.id}
+          <Pressable
+            style={[
+              styles.voiceChip,
+              selectedLanguage === 'english' && styles.voiceChipSelected,
+              selectedLanguage !== 'english' && styles.voiceChipMuted,
+            ]}
+            onPress={() => setSelectedLanguage('english')}
+          >
+            <Text
               style={[
-                styles.voiceChip,
-                selectedVoice.id === voice.id && styles.voiceChipSelected,
+                styles.voiceChipLabel,
+                selectedLanguage === 'english' && styles.voiceChipLabelSelected,
               ]}
-              onPress={() => setSelectedVoice(voice)}
             >
-              <Text
-                style={[
-                  styles.voiceChipLabel,
-                  selectedVoice.id === voice.id && styles.voiceChipLabelSelected,
-                ]}
-              >
-                {voice.label}
-              </Text>
-              <Text
-                style={[
-                  styles.voiceChipSubtitle,
-                  selectedVoice.id === voice.id && styles.voiceChipSubtitleSelected,
-                ]}
-              >
-                {voice.subtitle}
-              </Text>
-            </Pressable>
-          ))}
+              English
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.voiceChip,
+              selectedLanguage === 'hindi' && styles.voiceChipSelectedHindi,
+              selectedLanguage !== 'hindi' && styles.voiceChipMuted,
+            ]}
+            onPress={() => setSelectedLanguage('hindi')}
+          >
+            <Text
+              style={[
+                styles.voiceChipLabel,
+                selectedLanguage === 'hindi' && styles.voiceChipLabelSelectedHindi,
+              ]}
+            >
+              Hindi
+            </Text>
+          </Pressable>
         </View>
       </View>
     </View>
   );
+
+  // Show Hindi voice screen when selected
+  if (showHindiScreen) {
+    return <HindiVoiceScreen onBack={handleHindiBack} />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -657,6 +812,14 @@ export default function VoiceAgentScreen() {
           isActive={callState === 'active'}
           isUserSpeaking={isUserSpeaking}
           isAssistantSpeaking={isAssistantSpeaking}
+        />
+      )}
+
+      {/* Intervention indicator — shows active guidance type */}
+      {callState === 'active' && (
+        <InterventionIndicator
+          intervention={currentIntervention}
+          isActive={callState === 'active'}
         />
       )}
 
@@ -683,7 +846,13 @@ export default function VoiceAgentScreen() {
       {/* Controls */}
       <View style={[styles.controlsBar, { paddingBottom: 24 }]}>
         {callState === 'idle' && (
-          <Pressable style={styles.startPill} onPress={handleStartCall}>
+          <Pressable
+            style={[
+              styles.startPill,
+              selectedLanguage === 'hindi' && styles.startPillHindi,
+            ]}
+            onPress={handleStartCall}
+          >
             <Ionicons name="mic" size={22} color="#FFFFFF" />
             <Text style={styles.startPillText}>Start</Text>
           </Pressable>
@@ -847,20 +1016,22 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   avatarCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(185, 166, 255, 0.12)',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  mascotImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   avatarStatusText: {
     fontSize: 15,
     fontFamily: 'Outfit-Regular',
     color: 'rgba(255, 255, 255, 0.7)',
-  },
-  speakingIndicatorRow: {
-    marginBottom: 8,
   },
 
   // ── Idle screen ──
@@ -906,6 +1077,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(185, 166, 255, 0.2)',
     borderColor: LIGHT_THEME.accent,
   },
+  voiceChipMuted: {
+    opacity: 0.5,
+  },
   voiceChipLabel: {
     fontSize: 14,
     fontFamily: 'Outfit-Medium',
@@ -922,6 +1096,16 @@ const styles = StyleSheet.create({
   },
   voiceChipSubtitleSelected: {
     color: LIGHT_THEME.accent,
+  },
+  voiceChipSelectedHindi: {
+    backgroundColor: 'rgba(249, 168, 212, 0.25)',
+    borderColor: '#F9A8D4',
+  },
+  voiceChipLabelSelectedHindi: {
+    color: '#F9A8D4',
+  },
+  voiceChipSubtitleSelectedHindi: {
+    color: '#F9A8D4',
   },
 
   // ── Controls ──
@@ -982,6 +1166,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: 'Outfit-SemiBold',
     color: '#FFFFFF',
+  },
+  startPillHindi: {
+    backgroundColor: 'rgba(249, 168, 212, 0.25)',
+    borderColor: 'rgba(249, 168, 212, 0.45)',
   },
   connectingPill: {
     flexDirection: 'row',

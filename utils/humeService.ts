@@ -180,6 +180,18 @@ export class HumeEVIService {
     });
   }
 
+  /**
+   * Send session settings with variables (e.g., intervention_guidance)
+   * Used to inject dynamic guidance into the conversation
+   */
+  sendSessionSettings(variables: Record<string, string>): void {
+    if (!this.socket || !this._isConnected) return;
+    this.sendJSON({
+      type: 'session_settings',
+      variables,
+    });
+  }
+
   private sendJSON(data: Record<string, any>): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
     try {
