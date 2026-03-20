@@ -96,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Fetch user profile from profiles table
+   * PGRST116 = no rows found (expected for new users)
    */
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -103,15 +104,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Returns null instead of error when no rows
 
       if (error) {
         console.error('Error fetching profile:', error);
         return null;
       }
 
-      setProfile(data as Profile);
-      return data as Profile;
+      if (data) {
+        setProfile(data as Profile);
+        return data as Profile;
+      }
+
+      // No profile yet (new user) - this is expected
+      return null;
     } catch (error) {
       console.error('Error fetching profile:', error);
       return null;
