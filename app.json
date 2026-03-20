@@ -18,7 +18,14 @@
       "bundleIdentifier": "health.melloai.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Mello needs microphone access for voice conversations.",
-        "NSSpeechRecognitionUsageDescription": "Mello uses speech recognition to understand you better."
+        "NSSpeechRecognitionUsageDescription": "Mello uses speech recognition to understand you better.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.499732705533-ot31akqnmvgvona2a89j2dbhfle7a2om"
+            ]
+          }
+        ]
       }
     },
     "android": {
