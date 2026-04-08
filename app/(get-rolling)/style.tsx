@@ -33,6 +33,7 @@ import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
+import { updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // Warm Sunset/Coral Aurora - Inviting & Nurturing
 const AURORA_GRADIENT = ['#F8E8E0', '#F0C8B8', '#D88868', '#984838', '#401818', '#E8A088'] as const;
@@ -196,8 +197,18 @@ export default function StyleScreen() {
     ExpoSpeechRecognitionModule.stop();
   };
 
-  const handleNext = () => router.push('/(get-rolling)/presence');
-  const handleClose = () => router.push('/(get-rolling)/presence');
+  const handleNext = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ style: userResponse });
+    }
+    router.push('/(get-rolling)/presence');
+  };
+  const handleClose = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ style: userResponse });
+    }
+    router.push('/(get-rolling)/presence');
+  };
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,

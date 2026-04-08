@@ -1,9 +1,21 @@
 # Mello API Endpoints Documentation
 
-> **Version**: 1.0.0
-> **Backend**: Supabase (PostgreSQL + Auth + Edge Functions)
-> **Base URL**: `https://drepvbrhkxzwtwqncnyd.supabase.co`
-> **Last Updated**: 2026-03-19
+> **Version**: 1.1.0
+> **Last Updated**: 2026-03-21
+
+---
+
+## API Routing Guide
+
+Mello uses **three** API backends. Know which one to call:
+
+| Backend | Base URL | Used For |
+|---------|----------|----------|
+| **Azure Backend** | `https://new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io` | Onboarding, Get Rolling, Chat, Mood, Journal |
+| **Supabase Direct** | `https://drepvbrhkxzwtwqncnyd.supabase.co` | Auth, Profiles, Settings, Delete Account |
+| **External Services** | `wss://api.hume.ai`, LiveKit | Voice/Text Chat (WebSocket) |
+
+> **See also**: [`docs/BACKEND_API.md`](./BACKEND_API.md) — Detailed Azure backend endpoint docs (request/response schemas, field mapping, gap analysis)
 
 ---
 

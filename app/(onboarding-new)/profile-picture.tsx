@@ -23,7 +23,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { saveAvatar } from '@/utils/onboardingStorage';
+import { saveAvatar, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -207,6 +207,17 @@ export default function ProfilePictureScreen() {
   const [isSheetVisible, setIsSheetVisible] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState('');
 
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('profile-picture');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (data.avatarType) setAvatarType(data.avatarType as AvatarType);
+      if (data.avatarValue) setAvatarValue(data.avatarValue);
+    };
+    load();
+  }, []);
+
   // Animation values for bottom sheet
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
@@ -214,7 +225,11 @@ export default function ProfilePictureScreen() {
   const canContinue = avatarValue !== null;
 
   const handleBack = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding-new)/name-input');
+    }
   };
 
   const handleContinue = () => {

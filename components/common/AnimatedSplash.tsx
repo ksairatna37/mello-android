@@ -2,11 +2,12 @@
  * Mello Animated Splash Screen
  * Displays the "mello" text animation (Apple "hello" style)
  * with DreamyGradient background
- * Created with LottieLab
+ * + Fixed "take a deep breath" text
+ * + Random phrase at bottom (picked once on load)
  */
 
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -19,6 +20,18 @@ import DreamyGradient from './DreamyGradient';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Random phrases pool (one picked on each load)
+const DYNAMIC_PHRASES = [
+  "you're doing great",
+  "one moment at a time",
+  "be gentle with yourself",
+  "you matter",
+  "you're not alone",
+  "you've got this",
+  "feeling is healing",
+  "you are enough",
+];
+
 interface AnimatedSplashProps {
   onComplete: () => void;
 }
@@ -28,6 +41,11 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
   const animationFinished = useRef(false);
+
+  // Pick one random phrase on mount
+  const [randomPhrase] = useState(
+    () => DYNAMIC_PHRASES[Math.floor(Math.random() * DYNAMIC_PHRASES.length)]
+  );
 
   useEffect(() => {
     // Play the animation
@@ -70,6 +88,7 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
     transform: [{ scale: scale.value }],
   }));
 
+
   return (
     <Animated.View style={[styles.container, containerStyle]}>
       {/* Dreamy gradient background with floating clouds & particles */}
@@ -88,6 +107,16 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
           onAnimationFinish={handleAnimationFinish}
         />
       </View>
+
+      {/* Fixed "take a deep breath" text */}
+      <View style={styles.breatheContainer}>
+        <Text style={styles.breatheText}>take a deep breath</Text>
+      </View>
+
+      {/* Random phrase at bottom */}
+      <View style={styles.phraseContainer}>
+        <Text style={styles.phraseText}>{randomPhrase}</Text>
+      </View>
     </Animated.View>
   );
 };
@@ -104,5 +133,31 @@ const styles = StyleSheet.create({
   lottie: {
     width: SCREEN_WIDTH * 0.7,
     height: SCREEN_HEIGHT * 0.35,
+  },
+  breatheContainer: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  breatheText: {
+    fontSize: 16,
+    fontFamily: 'Outfit-Medium',
+    color: 'rgba(255, 255, 255, 0.85)',
+    letterSpacing: 1,
+  },
+  phraseContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  phraseText: {
+    fontSize: 14,
+    fontFamily: 'Outfit-Regular',
+    color: 'rgba(255, 255, 255, 0.7)',
+    letterSpacing: 0.5,
   },
 });

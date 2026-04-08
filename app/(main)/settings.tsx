@@ -3,7 +3,7 @@
  * Clean white cards with soft shadows
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
 import MelloGradient from '@/components/common/MelloGradient';
+import { useAuth } from '@/contexts/AuthContext';
+import SignOutBottomSheet from '@/components/settings/SignOutBottomSheet';
 
 interface SettingsItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -57,6 +59,12 @@ const SettingsItem = ({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { signOut, user, emailUser, loading } = useAuth();
+  const [showSignOutSheet, setShowSignOutSheet] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  // Get current user email for display
+  const currentEmail = user?.email || emailUser?.email || 'user@example.com';
 
   const handleCrisisResources = () => {
     Alert.alert(
@@ -85,16 +93,14 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => {
-          router.replace('/');
-        },
-      },
-    ]);
+    setShowSignOutSheet(true);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setSigningOut(true);
+    await signOut();
+    setSigningOut(false);
+    setShowSignOutSheet(false);
   };
 
   const handleDeleteAccount = () => {
@@ -124,7 +130,7 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 20, paddingBottom: 120 },
+          { paddingTop: insets.top + 20, paddingBottom: 20 },
         ]}
       >
         {/* Header */}
@@ -150,14 +156,14 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="mail-outline"
               title="Email"
-              subtitle="user@example.com"
+              subtitle={currentEmail}
               onPress={() => {}}
             />
             <View style={styles.divider} />
             <SettingsItem
               icon="lock-closed-outline"
               title="Change Password"
-              onPress={() => {}}
+              onPress={() => router.push('/change-password')}
             />
           </View>
         </View>
@@ -208,6 +214,14 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Sign Out Bottom Sheet */}
+      <SignOutBottomSheet
+        visible={showSignOutSheet}
+        onClose={() => setShowSignOutSheet(false)}
+        onSignOut={handleConfirmSignOut}
+        loading={signingOut}
+      />
     </View>
   );
 }
@@ -298,14 +312,13 @@ const styles = StyleSheet.create({
 
   appInfo: {
     alignItems: 'center',
-    paddingVertical: 32,
-    marginTop: 8,
+    paddingVertical: 16,
+    marginTop: 4,
   },
   appName: {
-    fontSize: 24,
-    fontFamily: 'Outfit-Light',
+    fontSize: 28,
+    fontFamily: 'Playwrite',
     color: LIGHT_THEME.accent,
-    letterSpacing: 1,
   },
   appVersion: {
     fontSize: 13,

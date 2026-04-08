@@ -212,7 +212,7 @@ const LipsIcon = () => {
 
 import AuroraGradient from '@/components/common/AuroraGradient';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
-import { getOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -432,8 +432,9 @@ export default function InhaleExhaleScreen() {
   const [activeMessageSet, setActiveMessageSet] = useState<MessageSet>(MESSAGE_SETS.default);
   const [firstName, setFirstName] = useState<string>('');
 
-  // Load personalization from onboarding data
+  // Save current step + load personalization
   useEffect(() => {
+    saveCurrentStep('get-rolling/inhale-exhale');
     const loadPersonalization = async () => {
       const data = await getOnboardingData();
 

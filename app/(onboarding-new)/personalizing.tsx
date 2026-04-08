@@ -44,7 +44,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
-import { getOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION PHILOSOPHY
@@ -114,6 +114,11 @@ export default function PersonalizingScreen() {
   const [firstName, setFirstName] = useState<string>(params.firstName || 'there');
   const [primaryFeeling, setPrimaryFeeling] = useState<string | null>(null);
   const [moodIntensity, setMoodIntensity] = useState<number>(0);
+
+  // Save current step for resume on app restart
+  useEffect(() => {
+    saveCurrentStep('personalizing');
+  }, []);
 
   // Load personalization data from storage
   useEffect(() => {

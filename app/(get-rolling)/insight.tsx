@@ -28,7 +28,8 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
-import { getOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, saveCurrentStep, updateOnboardingData } from '@/utils/onboardingStorage';
+import { syncOnboardingToBackend } from '@/services/onboarding';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION PHILOSOPHY
@@ -109,8 +110,9 @@ export default function InsightScreen() {
   const [primaryFeeling, setPrimaryFeeling] = useState<string | null>(null);
   const [moodIntensity, setMoodIntensity] = useState<number>(0);
 
-  // Load personalization data
+  // Save current step + load personalization data
   useEffect(() => {
+    saveCurrentStep('get-rolling/insight');
     const loadPersonalization = async () => {
       try {
         const data = await getOnboardingData();
@@ -175,8 +177,23 @@ export default function InsightScreen() {
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  const handleComplete = () => router.replace('/(main)/chat');
-  const handleClose = () => router.replace('/(main)/chat'); // Last screen - exit to chat
+  // INVESTOR DEMO: Redirect to voice instead of chat
+  const DEMO_REDIRECT_TO_VOICE = false;
+  const DEFAULT_MAIN_ROUTE = DEMO_REDIRECT_TO_VOICE ? '/(main)/call' : '/(main)/chat';
+
+  const handleComplete = async () => {
+    // Clear saved step so app doesn't resume here
+    await updateOnboardingData({ currentStep: undefined });
+    // Sync all onboarding data (including get-rolling) to backend
+    await syncOnboardingToBackend();
+    router.replace(DEFAULT_MAIN_ROUTE);
+  };
+  const handleClose = async () => {
+    await updateOnboardingData({ currentStep: undefined });
+    // Sync all onboarding data to backend
+    await syncOnboardingToBackend();
+    router.replace(DEFAULT_MAIN_ROUTE);
+  };
 
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({

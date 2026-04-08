@@ -25,7 +25,7 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import SelectionCard from '@/components/get-rolling/SelectionCard';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
-import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION PHILOSOPHY
@@ -74,8 +74,9 @@ export default function AgeScreen() {
   const [firstName, setFirstName] = useState<string | null>(null);
   const [moodIntensity, setMoodIntensity] = useState<number>(0);
 
-  // Load personalization data
+  // Save current step + load persisted data
   useEffect(() => {
+    saveCurrentStep('get-rolling/age');
     const loadPersonalization = async () => {
       try {
         const data = await getOnboardingData();
@@ -83,6 +84,7 @@ export default function AgeScreen() {
         if (typeof data.moodIntensity === 'number') {
           setMoodIntensity(data.moodIntensity);
         }
+        if (data.ageRange) setSelectedAge(data.ageRange);
       } catch (e) {
         console.log('Failed to load personalization:', e);
       }

@@ -73,6 +73,11 @@ const HUME_DEFAULT_CONFIG_ID = process.env.EXPO_PUBLIC_HUME_CONFIG_ID || '';
 type VoiceLanguage = 'english' | 'hindi';
 
 // ═══════════════════════════════════════════════════
+// INVESTOR DEMO MODE — set to false to re-enable Hindi
+// ═══════════════════════════════════════════════════
+const DISABLE_HINDI_FOR_DEMO = false;
+
+// ═══════════════════════════════════════════════════
 // DEV MODE — set to true to skip Hume and use fake transcript
 // ═══════════════════════════════════════════════════
 const DEV_MODE = false;
@@ -772,19 +777,25 @@ export default function VoiceAgentScreen() {
           <Pressable
             style={[
               styles.voiceChip,
-              selectedLanguage === 'hindi' && styles.voiceChipSelectedHindi,
-              selectedLanguage !== 'hindi' && styles.voiceChipMuted,
+              selectedLanguage === 'hindi' && !DISABLE_HINDI_FOR_DEMO && styles.voiceChipSelectedHindi,
+              (selectedLanguage !== 'hindi' || DISABLE_HINDI_FOR_DEMO) && styles.voiceChipMuted,
+              DISABLE_HINDI_FOR_DEMO && styles.voiceChipDisabled,
             ]}
-            onPress={() => setSelectedLanguage('hindi')}
+            onPress={() => !DISABLE_HINDI_FOR_DEMO && setSelectedLanguage('hindi')}
+            disabled={DISABLE_HINDI_FOR_DEMO}
           >
             <Text
               style={[
                 styles.voiceChipLabel,
-                selectedLanguage === 'hindi' && styles.voiceChipLabelSelectedHindi,
+                selectedLanguage === 'hindi' && !DISABLE_HINDI_FOR_DEMO && styles.voiceChipLabelSelectedHindi,
+                DISABLE_HINDI_FOR_DEMO && styles.voiceChipLabelDisabled,
               ]}
             >
               Hindi
             </Text>
+            {DISABLE_HINDI_FOR_DEMO && (
+              <Text style={styles.comingSoonBadge}>Coming Soon</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -1106,6 +1117,24 @@ const styles = StyleSheet.create({
   },
   voiceChipSubtitleSelectedHindi: {
     color: '#F9A8D4',
+  },
+  voiceChipDisabled: {
+    opacity: 0.5,
+    borderStyle: 'dashed',
+  },
+  voiceChipLabelDisabled: {
+    color: LIGHT_THEME.textMuted,
+  },
+  comingSoonBadge: {
+    fontSize: 9,
+    fontFamily: 'Outfit-Medium',
+    color: '#F9A8D4',
+    backgroundColor: 'rgba(249, 168, 212, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+    overflow: 'hidden',
   },
 
   // ── Controls ──

@@ -9,7 +9,7 @@
  * - Gradient (#FFFFFF → #c8e4f5) blends with background
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import CrisisCheckSheet from '@/components/onboarding/CrisisCheckSheet';
-import { updateOnboardingData } from '@/utils/onboardingStorage';
+import { updateOnboardingData, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CURRENT_STEP = 6;
@@ -87,6 +87,22 @@ export default function MoodWeightScreen() {
   const { firstName } = useLocalSearchParams<{ firstName: string }>();
   const [currentStage, setCurrentStage] = useState(1);
   const [showCrisisCheck, setShowCrisisCheck] = useState(false);
+
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('mood-weight');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (typeof data.moodIntensity === 'number') {
+        setCurrentStage(data.moodIntensity);
+        // Sync shared values to the loaded stage
+        translateX.value = getSnapPosition(data.moodIntensity);
+        labelListY.value = -data.moodIntensity * LABEL_HEIGHT;
+        currentStageShared.value = data.moodIntensity;
+      }
+    };
+    load();
+  }, []);
 
   // Shared values
   const translateX = useSharedValue(getSnapPosition(1));
@@ -188,7 +204,11 @@ export default function MoodWeightScreen() {
   }));
 
   const handleBack = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding-new)/feelings-select');
+    }
   };
 
   const handleContinue = () => {

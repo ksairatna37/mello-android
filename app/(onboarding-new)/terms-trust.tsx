@@ -10,7 +10,7 @@
  * - Checkbox design from feelings-select.tsx
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -34,7 +34,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
-import { updateOnboardingData } from '@/utils/onboardingStorage';
+import { updateOnboardingData, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CURRENT_STEP = 7;
@@ -168,6 +168,22 @@ export default function TermsTrustScreen() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('terms-trust');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (data.termsAccepted) setTermsAccepted(true);
+      // If terms already accepted, jump to consent view
+      if (data.termsAccepted) {
+        setShowConsent(true);
+        setCurrentSlide(TRUST_SLIDES.length - 1);
+        setDisplayedSlide(TRUST_SLIDES.length - 1);
+      }
+    };
+    load();
+  }, []);
+
   const fadeAnim = useSharedValue(1);
   const cardOpacity = useSharedValue(1);
   const consentOpacity = useSharedValue(0);
@@ -200,7 +216,11 @@ export default function TermsTrustScreen() {
       // Go to previous slide
       goToSlide(currentSlide - 1);
     } else {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(onboarding-new)/mood-weight');
+      }
     }
   };
 

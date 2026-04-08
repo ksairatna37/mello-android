@@ -8,7 +8,7 @@
  * - Personalized greeting with user's name
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
-import { updateOnboardingData } from '@/utils/onboardingStorage';
+import { updateOnboardingData, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
 
 const CURRENT_STEP = 5;
 
@@ -101,6 +101,16 @@ export default function FeelingsSelectScreen() {
   const { firstName } = useLocalSearchParams<{ firstName: string }>();
   const [selectedFeelings, setSelectedFeelings] = useState<string[]>([]);
 
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('feelings-select');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (data.selectedFeelings?.length) setSelectedFeelings(data.selectedFeelings);
+    };
+    load();
+  }, []);
+
   const userName = firstName || 'there';
 
   const canContinue = selectedFeelings.length > 0;
@@ -113,7 +123,12 @@ export default function FeelingsSelectScreen() {
   }, [selectedFeelings]);
 
   const handleBack = () => {
-    router.back();
+    // Use canGoBack to check if there's history, otherwise navigate explicitly
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding-new)/profile-picture');
+    }
   };
 
   const handleContinue = async () => {

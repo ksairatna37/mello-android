@@ -16,25 +16,35 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
 import OTPInput from '@/components/onboarding/OTPInput';
 import Toast from '@/components/common/Toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const RESEND_DELAY = 30; // Seconds before resend is enabled
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
-  const email = params.email || 'your@email.com';
+  const { pendingEmail, verifyOtp, resendOtp, loading } = useAuth();
 
   const [otpCode, setOtpCode] = useState('');
   const [hasError, setHasError] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("That code doesn't look right.");
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendTimer, setResendTimer] = useState(RESEND_DELAY);
   const [canResend, setCanResend] = useState(false);
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
+
+  // Redirect if no pending email (but not after successful verification)
+  useEffect(() => {
+    if (!pendingEmail && !verificationSuccess) {
+      console.log('>>> No pending email, redirecting to welcome');
+      router.replace('/(onboarding)/welcome' as any);
+    }
+  }, [pendingEmail, verificationSuccess, router]);
 
   // Resend timer countdown
   useEffect(() => {
@@ -60,23 +70,29 @@ export default function VerifyEmailScreen() {
   const handleOTPComplete = useCallback(async (code: string) => {
     setIsVerifying(true);
 
-    // TODO: Replace with actual API call to verify OTP
-    // Simulating API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const result = await verifyOtp(code);
 
-    // Simulate error for demo (in production, check actual response)
-    // For demo: code "111111" is valid, anything else is invalid
-    if (code === '111111') {
-      // Success - navigate to disclaimer screen
-      router.push('/(onboarding-new)/disclaimer' as any);
-    } else {
-      // Error
+      if (result.success) {
+        // Mark as success to prevent redirect on pendingEmail clear
+        setVerificationSuccess(true);
+        // Success - navigation is handled by AuthContext
+        console.log('>>> OTP verified successfully');
+      } else {
+        // Error
+        setHasError(true);
+        setToastMessage(result.error || "That code doesn't look right.");
+        setShowToast(true);
+      }
+    } catch (error: any) {
+      console.error('>>> OTP verification error:', error);
       setHasError(true);
+      setToastMessage(error.message || "Verification failed. Please try again.");
       setShowToast(true);
+    } finally {
+      setIsVerifying(false);
     }
-
-    setIsVerifying(false);
-  }, [router]);
+  }, [verifyOtp]);
 
   const handleResendCode = async () => {
     if (!canResend) return;
@@ -87,8 +103,20 @@ export default function VerifyEmailScreen() {
     setOtpCode('');
     setHasError(false);
 
-    // TODO: Call API to resend code
-    console.log('Resending code to:', email);
+    try {
+      const result = await resendOtp();
+      if (result.success) {
+        setToastMessage('Code resent successfully!');
+        setShowToast(true);
+      } else {
+        setToastMessage(result.error || 'Failed to resend code.');
+        setShowToast(true);
+      }
+    } catch (error: any) {
+      console.error('>>> Resend OTP error:', error);
+      setToastMessage('Failed to resend code.');
+      setShowToast(true);
+    }
   };
 
   const handleBack = () => {
@@ -103,13 +131,18 @@ export default function VerifyEmailScreen() {
 
   const isComplete = otpCode.length === 6;
 
+  // Mask email for display (show first 2 chars + *** + domain)
+  const maskedEmail = pendingEmail
+    ? `${pendingEmail.slice(0, 2)}***@${pendingEmail.split('@')[1] || ''}`
+    : 'your@email.com';
+
   return (
     <OnboardingLayout
       currentStep={1}
       onBack={handleBack}
       onNext={handleNext}
       canGoBack={true}
-      canGoNext={isComplete && !isVerifying}
+      canGoNext={isComplete && !isVerifying && !loading}
     >
       {/* Title */}
       <View>
@@ -133,7 +166,7 @@ export default function VerifyEmailScreen() {
       <View>
         <Text style={styles.description}>
           We've sent an <Text style={styles.descriptionBold}>Email</Text> verification code to{' '}
-          <Text style={styles.emailText}>{email}</Text>
+          <Text style={styles.emailText}>{pendingEmail || 'your@email.com'}</Text>
         </Text>
       </View>
 
@@ -142,7 +175,7 @@ export default function VerifyEmailScreen() {
         <TouchableOpacity
           style={[styles.resendButton, !canResend && styles.resendButtonDisabled]}
           onPress={handleResendCode}
-          disabled={!canResend}
+          disabled={!canResend || loading}
           activeOpacity={0.7}
         >
           <Ionicons
@@ -156,13 +189,13 @@ export default function VerifyEmailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Toast for Error */}
+      {/* Toast for Error/Success */}
       <View style={styles.toastContainer}>
         <Toast
-          message="That code doesn't look right."
+          message={toastMessage}
           visible={showToast}
           onHide={() => setShowToast(false)}
-          type="error"
+          type={toastMessage.includes('success') ? 'success' : 'error'}
         />
       </View>
     </OnboardingLayout>

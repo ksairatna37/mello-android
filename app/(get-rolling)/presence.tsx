@@ -33,6 +33,7 @@ import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
+import { updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // Soft Green/Mint Aurora - Grounding & Present
 const AURORA_GRADIENT = ['#E8F8F0', '#C0E8D8', '#68B898', '#386858', '#102820', '#90D8B8'] as const;
@@ -196,8 +197,18 @@ export default function PresenceScreen() {
     ExpoSpeechRecognitionModule.stop();
   };
 
-  const handleNext = () => router.push('/(get-rolling)/discomfort');
-  const handleClose = () => router.push('/(get-rolling)/discomfort');
+  const handleNext = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ presence: userResponse });
+    }
+    router.push('/(get-rolling)/discomfort');
+  };
+  const handleClose = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ presence: userResponse });
+    }
+    router.push('/(get-rolling)/discomfort');
+  };
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,

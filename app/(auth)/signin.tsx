@@ -3,7 +3,7 @@
  * Email/password authentication + Google OAuth
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,14 +21,10 @@ import { Colors } from '@/constants/colors';
 import { Spacing, BorderRadius, Shadows } from '@/constants/spacing';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Test credentials for quick login
-const TEST_EMAIL = 'test@mello.app';
-const TEST_PASSWORD = 'Test1234!';
-
 export default function SignInScreen() {
   console.log('>>> SignInScreen RENDERING');
   const router = useRouter();
-  const { signInWithGoogle, loading: authLoading } = useAuth();
+  const { signInWithGoogle, signInWithEmail, loading: authLoading } = useAuth();
   console.log('>>> authLoading:', authLoading);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +35,6 @@ export default function SignInScreen() {
 
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {
-    Alert.alert('Debug', 'Google Sign In button clicked!');
     console.log('>>> handleGoogleSignIn called');
     try {
       setIsGoogleLoading(true);
@@ -58,19 +52,7 @@ export default function SignInScreen() {
     }
   };
 
-  // Quick login for development - continues onboarding
-  const handleQuickLogin = () => {
-    Alert.alert('Debug', 'Quick Login button clicked!');
-    setEmail(TEST_EMAIL);
-    setPassword(TEST_PASSWORD);
-    // Continue to onboarding after auth
-    setTimeout(() => {
-      router.replace('/(onboarding-new)/disclaimer');
-    }, 100);
-  };
-
   const handleSignIn = async () => {
-    Alert.alert('Debug', 'Sign In button clicked!');
     if (!email || !password) {
       setError('Please fill in all fields');
       return;
@@ -80,14 +62,16 @@ export default function SignInScreen() {
     setError('');
 
     try {
-      // TODO: Implement Supabase auth
-      console.log('Sign in:', { email, password });
+      console.log('>>> Sign in with email:', email);
+      const result = await signInWithEmail(email, password);
 
-      // Continue to onboarding (for new users) or chat (for returning users)
-      // TODO: Check first_login flag from user profile
-      router.replace('/(onboarding-new)/disclaimer');
-    } catch (err) {
-      setError('Something went wrong. Please try again.');
+      if (!result.success) {
+        setError(result.error || 'Sign in failed. Please try again.');
+      }
+      // Navigation is handled by AuthContext after successful sign-in
+    } catch (err: any) {
+      console.error('>>> Sign in error:', err);
+      setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -168,19 +152,11 @@ export default function SignInScreen() {
           <TouchableOpacity
             style={[styles.signInButton, isLoading && styles.buttonDisabled]}
             onPress={handleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || !email || !password}
           >
             <Text style={styles.signInButtonText}>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Text>
-          </TouchableOpacity>
-
-          {/* Quick Login for Development */}
-          <TouchableOpacity
-            style={styles.quickLoginButton}
-            onPress={handleQuickLogin}
-          >
-            <Text style={styles.quickLoginText}>Quick Login (Dev)</Text>
           </TouchableOpacity>
 
           {/* Divider */}

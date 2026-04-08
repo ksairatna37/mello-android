@@ -44,9 +44,14 @@ export interface OnboardingData {
   ageRange?: string;           // Age selection (under-18, 18-24, 25-34, etc.)
   avatarReason?: string;       // Why they picked their avatar
   discomfortReasons?: string[]; // What's weighing on them (multi-select)
+  style?: string;              // Communication style preference
+  challenge?: string;          // Current challenge
+  presence?: string;           // Presence preference
+  insight?: string;            // Insight preference
 
   // Completion tracking
   completedSteps?: string[];
+  currentStep?: string;  // Track current onboarding screen for resume
   onboardingCompleted?: boolean;
   onboardingCompletedAt?: string;
 
@@ -255,7 +260,23 @@ export async function completeOnboarding(): Promise<void> {
   await updateOnboardingData({
     onboardingCompleted: true,
     onboardingCompletedAt: new Date().toISOString(),
+    currentStep: undefined, // Clear current step on completion
   });
+}
+
+/**
+ * Save current onboarding step (for resume on app restart)
+ */
+export async function saveCurrentStep(stepName: string): Promise<void> {
+  await updateOnboardingData({ currentStep: stepName });
+}
+
+/**
+ * Get current onboarding step (for resume on app restart)
+ */
+export async function getCurrentStep(): Promise<string | undefined> {
+  const data = await getOnboardingData();
+  return data.currentStep;
 }
 
 /**

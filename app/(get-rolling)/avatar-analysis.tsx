@@ -35,7 +35,7 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import SelectionCard from '@/components/get-rolling/SelectionCard';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
-import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // Purple/violet aurora - VERSION 4 (Ethereal Dream)
 const AURORA_GRADIENT = ['#E0D0F0', '#D8B8E0', '#A878B8', '#5A3878', '#1A1040', '#6A4080'] as const;
@@ -109,8 +109,9 @@ export default function AvatarAnalysisScreen() {
   const zoomScale = useSharedValue(0);
   const backdropOpacity = useSharedValue(0);
 
-  // Load avatar and personalization from storage
+  // Save current step + load persisted data
   useEffect(() => {
+    saveCurrentStep('get-rolling/avatar-analysis');
     const loadData = async () => {
       try {
         const stored = await AsyncStorage.getItem('userAvatar');
@@ -124,6 +125,7 @@ export default function AvatarAnalysisScreen() {
         if (typeof data.moodIntensity === 'number') {
           setMoodIntensity(data.moodIntensity);
         }
+        if (data.avatarReason) setSelectedOption(data.avatarReason);
       } catch (e) {
         console.log('Failed to load data:', e);
       }

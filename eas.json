@@ -9,7 +9,12 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_HUME_API_KEY": "lNacYQhyNIzEPdIgUb6KkgSUex1VUkYjKnPQkYA3jExLudOg",
+        "EXPO_PUBLIC_HUME_CONFIG_ID": "3cdbbe91-bbf6-4e38-93b2-6166b113498a",
+        "EXPO_PUBLIC_LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token"
+      }
     },
     "production": {
       "autoIncrement": true

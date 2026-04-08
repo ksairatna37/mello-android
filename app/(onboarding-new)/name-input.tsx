@@ -26,7 +26,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
-import { updateOnboardingData } from '@/utils/onboardingStorage';
+import { updateOnboardingData, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
 
 const CURRENT_STEP = 3;
 
@@ -111,10 +111,25 @@ export default function NameInputScreen() {
   const [lastName, setLastName] = useState('');
   const lastNameRef = useRef<TextInput>(null);
 
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('name-input');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (data.firstName) setFirstName(data.firstName);
+      if (data.lastName) setLastName(data.lastName);
+    };
+    load();
+  }, []);
+
   const canContinue = firstName.trim().length > 0;
 
   const handleBack = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding)/welcome');
+    }
   };
 
   const handleContinue = async () => {

@@ -2,7 +2,8 @@
  * Auth Context for Mello Android
  *
  * Provides authentication state and methods throughout the app:
- * - Native Google Sign-In (in-app popup)
+ * - Email/Password Sign-In/Sign-Up (via backend API)
+ * - Native Google Sign-In (in-app popup via Supabase)
  * - Sign out
  * - Auth state listener
  * - Profile management
@@ -32,6 +33,21 @@ import {
 } from '@react-native-google-signin/google-signin';
 import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
+
+// Backend auth services
+import {
+  login as backendLogin,
+  signup as backendSignup,
+  verifyOtp as backendVerifyOtp,
+  resendOtp as backendResendOtp,
+  saveSession,
+  getSession,
+  clearSession,
+  type AuthProvider,
+} from '@/services/auth';
+
+// Onboarding storage (for clearing on logout)
+import { clearOnboardingData } from '@/utils/onboardingStorage';
 
 // Google OAuth Client IDs
 // Get these from Google Cloud Console -> Credentials -> OAuth 2.0 Client IDs
@@ -64,6 +80,10 @@ GoogleSignin.configure({
   scopes: ['profile', 'email'],
 });
 
+// INVESTOR DEMO: Redirect to voice instead of chat (chat is disabled)
+const DEMO_REDIRECT_TO_VOICE = false;
+const DEFAULT_MAIN_ROUTE = DEMO_REDIRECT_TO_VOICE ? '/(main)/call' : '/(main)/chat';
+
 // Profile interface matching the web app
 interface Profile {
   id: string;
@@ -75,14 +95,35 @@ interface Profile {
   updated_at?: string;
 }
 
+// Email user (for backend auth - no Supabase User object)
+interface EmailUser {
+  email: string;
+  userId?: string;
+  provider: 'email';
+}
+
 // Auth context type
 interface AuthContextType {
+  // State
   user: User | null;
+  emailUser: EmailUser | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
   initialized: boolean;
+  authProvider: AuthProvider | null;
+  pendingEmail: string | null; // Email awaiting OTP verification
+
+  // Email/Password auth (backend)
+  signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string; existingProvider?: string }>;
+  signUpWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsOtpVerification?: boolean; existingProvider?: string }>;
+  verifyOtp: (otp: string) => Promise<{ success: boolean; error?: string }>;
+  resendOtp: () => Promise<{ success: boolean; error?: string }>;
+
+  // Google auth (Supabase)
   signInWithGoogle: () => Promise<void>;
+
+  // Common
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -106,10 +147,14 @@ export const useAuth = () => {
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [emailUser, setEmailUser] = useState<EmailUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [authProvider, setAuthProvider] = useState<AuthProvider | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [pendingPassword, setPendingPassword] = useState<string | null>(null); // For auto-login after OTP
   const router = useRouter();
 
   /**
@@ -228,8 +273,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace('/(onboarding-new)/name-input' as any);
       } else {
         // Existing user, completed onboarding (first_login: true)
-        console.log('>>> Existing user with complete onboarding, going to main/chat');
-        router.replace('/(main)/chat' as any);
+        console.log('>>> Existing user with complete onboarding, going to main');
+        router.replace(DEFAULT_MAIN_ROUTE as any);
       }
     } catch (error) {
       console.error('>>> Error in handlePostAuthNavigation:', error);
@@ -332,33 +377,270 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Sign out from both Supabase and Google
+   * Sign up with email and password (backend API)
+   * After signup, user must verify OTP before they can login
    */
-  const signOut = useCallback(async () => {
+  const signUpWithEmail = useCallback(async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; needsOtpVerification?: boolean; existingProvider?: string }> => {
+    console.log('=== EMAIL SIGN UP STARTED ===');
     try {
       setLoading(true);
 
-      // Sign out from Google
+      const result = await backendSignup(email, password);
+
+      if (!result.success) {
+        console.log('>>> Signup failed:', result.error);
+        // Pass through existingProvider if present
+        return {
+          success: false,
+          error: result.error,
+          existingProvider: result.existingProvider,
+        };
+      }
+
+      console.log('>>> Signup successful for:', result.email);
+      console.log('>>> OTP verification required');
+
+      // Store email and password for OTP verification and auto-login
+      setPendingEmail(email);
+      setPendingPassword(password);
+
+      // Navigate to OTP verification screen
+      router.push('/(onboarding-new)/verify-email' as any);
+
+      return { success: true, needsOtpVerification: true };
+    } catch (error: any) {
+      console.error('>>> Signup error:', error);
+      return { success: false, error: error.message || 'Signup failed' };
+    } finally {
+      setLoading(false);
+      console.log('=== EMAIL SIGN UP FINISHED ===');
+    }
+  }, [router]);
+
+  /**
+   * Verify OTP after signup
+   * After verification, auto-login to get access tokens
+   */
+  const verifyOtp = useCallback(async (
+    otp: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    console.log('=== OTP VERIFICATION STARTED ===');
+    try {
+      setLoading(true);
+
+      if (!pendingEmail) {
+        return { success: false, error: 'No email pending verification' };
+      }
+
+      const result = await backendVerifyOtp(pendingEmail, otp);
+
+      if (!result.success) {
+        console.log('>>> OTP verification failed:', result.error);
+        return { success: false, error: result.error };
+      }
+
+      console.log('>>> OTP verified for:', result.email);
+
+      // Auto-login to get access tokens
+      let accessToken: string | undefined;
+      let refreshToken: string | undefined;
+      let userId = result.userId;
+
+      if (pendingPassword) {
+        console.log('>>> Auto-login to get tokens...');
+        const loginResult = await backendLogin(pendingEmail, pendingPassword);
+        if (loginResult.success && loginResult.accessToken) {
+          console.log('>>> Auto-login successful, got tokens');
+          accessToken = loginResult.accessToken;
+          refreshToken = loginResult.refreshToken;
+          userId = loginResult.userId || userId;
+        } else {
+          console.log('>>> Auto-login failed, continuing without tokens:', loginResult.error);
+        }
+      }
+
+      // Store pending values before clearing
+      const emailToSave = pendingEmail;
+
+      // Clear pending state
+      setPendingEmail(null);
+      setPendingPassword(null);
+
+      // Save session to local storage (with tokens if available)
+      await saveSession(emailToSave, 'email', {
+        userId,
+        accessToken,
+        refreshToken,
+      });
+
+      // Set email user state
+      setEmailUser({ email: emailToSave, userId, provider: 'email' });
+      setAuthProvider('email');
+
+      // Navigate to onboarding (new user always goes to onboarding)
+      await new Promise(resolve => setTimeout(resolve, 300));
+      router.replace('/(onboarding-new)/name-input' as any);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('>>> OTP verification error:', error);
+      return { success: false, error: error.message || 'Verification failed' };
+    } finally {
+      setLoading(false);
+      console.log('=== OTP VERIFICATION FINISHED ===');
+    }
+  }, [pendingEmail, pendingPassword, router]);
+
+  /**
+   * Resend OTP to pending email
+   */
+  const resendOtp = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    console.log('=== RESEND OTP STARTED ===');
+    try {
+      setLoading(true);
+
+      if (!pendingEmail) {
+        return { success: false, error: 'No email pending verification' };
+      }
+
+      const result = await backendResendOtp(pendingEmail);
+
+      if (!result.success) {
+        console.log('>>> Resend OTP failed:', result.error);
+        return { success: false, error: result.error };
+      }
+
+      console.log('>>> OTP resent to:', pendingEmail);
+      return { success: true };
+    } catch (error: any) {
+      console.error('>>> Resend OTP error:', error);
+      return { success: false, error: error.message || 'Failed to resend OTP' };
+    } finally {
+      setLoading(false);
+      console.log('=== RESEND OTP FINISHED ===');
+    }
+  }, [pendingEmail]);
+
+  /**
+   * Sign in with email and password (backend API)
+   */
+  const signInWithEmail = useCallback(async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; existingProvider?: string }> => {
+    console.log('=== EMAIL SIGN IN STARTED ===');
+    try {
+      setLoading(true);
+
+      const result = await backendLogin(email, password);
+
+      if (!result.success) {
+        console.log('>>> Login failed:', result.error);
+        // Pass through existingProvider if present
+        return {
+          success: false,
+          error: result.error,
+          existingProvider: result.existingProvider,
+        };
+      }
+
+      console.log('>>> Login successful for:', result.email);
+      console.log('>>> Got tokens:', result.accessToken ? 'yes' : 'no');
+
+      // Save session to local storage (with tokens)
+      await saveSession(email, 'email', {
+        userId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+
+      // Set email user state
+      setEmailUser({ email, userId: result.userId, provider: 'email' });
+      setAuthProvider('email');
+
+      // Check user status for navigation
+      const status = await checkUserStatus(email);
+      console.log('>>> User status:', status);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      if (status === 1) {
+        // Completed onboarding → main app
+        router.replace(DEFAULT_MAIN_ROUTE as any);
+      } else {
+        // New or incomplete → onboarding
+        router.replace('/(onboarding-new)/name-input' as any);
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('>>> Login error:', error);
+      return { success: false, error: error.message || 'Login failed' };
+    } finally {
+      setLoading(false);
+      console.log('=== EMAIL SIGN IN FINISHED ===');
+    }
+  }, [router, checkUserStatus]);
+
+  /**
+   * Sign out from all auth providers
+   */
+  const signOut = useCallback(async () => {
+    console.log('=== SIGN OUT STARTED ===');
+    try {
+      setLoading(true);
+
+      // Get current email for backend logout
+      const currentEmail = user?.email || emailUser?.email;
+
+      // Sign out from Google (if applicable)
       try {
         await GoogleSignin.signOut();
       } catch (e) {
         // Ignore Google sign-out errors
       }
 
-      // Sign out from Supabase
-      await supabase.auth.signOut();
+      // Sign out from Supabase (if applicable)
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        // Ignore Supabase sign-out errors
+      }
+
+      // Clear local session
+      await clearSession();
+
+      // Clear onboarding data (fresh start on next login)
+      await clearOnboardingData();
+
+      // Clear all state
       setUser(null);
+      setEmailUser(null);
       setSession(null);
       setProfile(null);
-      // Navigate to welcome screen
-      router.replace('/(onboarding)/welcome' as any);
+      setAuthProvider(null);
+
+      // Navigate to splash screen (will redirect to welcome)
+      router.replace('/');
+      console.log('=== SIGN OUT COMPLETE ===');
     } catch (error) {
       console.error('Sign out error:', error);
-      throw error;
+      // Still clear state even on error
+      setUser(null);
+      setEmailUser(null);
+      setSession(null);
+      setProfile(null);
+      setAuthProvider(null);
+      await clearSession();
+      await clearOnboardingData();
+      router.replace('/');
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, user?.email, emailUser?.email, authProvider]);
 
   /**
    * Refresh profile data
@@ -398,7 +680,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchProfile(user.id);
 
       // Navigate to main app
-      router.replace('/(main)/chat' as any);
+      router.replace(DEFAULT_MAIN_ROUTE as any);
     } catch (error) {
       console.error('>>> Error completing onboarding:', error);
       throw error;
@@ -409,17 +691,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Initialize auth state listener
    */
   useEffect(() => {
-    // Get initial session
+    // Get initial session (check both Supabase and local storage)
     const initializeAuth = async () => {
+      console.log('>>> Initializing auth...');
+
+      // First check for Supabase session (Google auth)
       const { data: { session: currentSession } } = await supabase.auth.getSession();
-      console.log('>>> Initial session:', currentSession?.user?.email || 'none');
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
 
       if (currentSession?.user) {
-        console.log('>>> Fetching initial profile...');
+        console.log('>>> Found Supabase session:', currentSession.user.email);
+        setSession(currentSession);
+        setUser(currentSession.user);
+        setAuthProvider('google');
         await fetchProfile(currentSession.user.id);
-        console.log('>>> Initial profile fetched');
+        setInitialized(true);
+        return;
+      }
+
+      // No Supabase session - check for email session in local storage
+      const storedSession = await getSession();
+      if (storedSession && storedSession.loginStatus) {
+        console.log('>>> Found stored email session:', storedSession.email);
+        setEmailUser({ email: storedSession.email, provider: 'email' });
+        setAuthProvider('email');
+        // Note: No profile fetch for email users (different backend)
+      } else {
+        console.log('>>> No active session found');
       }
 
       setInitialized(true);
@@ -457,12 +754,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile, handlePostAuthNavigation]);
 
   const value: AuthContextType = {
+    // State
     user,
+    emailUser,
     session,
     profile,
     loading,
     initialized,
+    authProvider,
+    pendingEmail,
+
+    // Email/Password auth
+    signInWithEmail,
+    signUpWithEmail,
+    verifyOtp,
+    resendOtp,
+
+    // Google auth
     signInWithGoogle,
+
+    // Common
     signOut,
     refreshProfile,
     completeOnboarding,

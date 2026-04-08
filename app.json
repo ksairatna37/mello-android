@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f8f7ff"
+      "backgroundColor": "#1B9AAA"
     },
     "ios": {
       "supportsTablet": true,
@@ -31,7 +31,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#f8f7ff"
+        "backgroundColor": "#1B9AAA"
       },
       "package": "health.melloai.app",
       "permissions": [

@@ -25,6 +25,8 @@ import {
   Keyboard,
   Platform,
   ActivityIndicator,
+  ToastAndroid,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,7 +51,7 @@ interface AuthBottomSheetProps {
 export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signInWithGoogle, loading: authLoading } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, loading: authLoading } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -60,6 +62,7 @@ export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetPro
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showGoogleSuggestion, setShowGoogleSuggestion] = useState(false);
 
   // Refs to track password input focus
   const passwordRef = useRef<TextInput>(null);
@@ -152,21 +155,59 @@ export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetPro
   };
 
   const handleAuth = async () => {
-    if (!email || !password) return;
-    if (isSignUp && password !== confirmPassword) return;
+    // Validate inputs
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+    if (isSignUp && password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (isSignUp && password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
 
     Keyboard.dismiss();
+    setError('');
+    setShowGoogleSuggestion(false);
     setIsLoading(true);
 
-    // Simulate auth delay
-    setTimeout(() => {
+    try {
+      let result: { success: boolean; error?: string; needsOtpVerification?: boolean; existingProvider?: string };
+
+      if (isSignUp) {
+        // Sign up with backend (only email and password, no confirmPassword)
+        result = await signUpWithEmail(email, password);
+
+        if (result.success && result.needsOtpVerification) {
+          // Close sheet - navigation to OTP screen is handled by AuthContext
+          handleClose();
+          return;
+        }
+      } else {
+        // Sign in with backend
+        result = await signInWithEmail(email, password);
+      }
+
+      if (result.success) {
+        // Success - navigation is handled by AuthContext
+        handleClose();
+      } else {
+        // Check if user should use Google instead
+        if (result.existingProvider === 'google') {
+          setShowGoogleSuggestion(true);
+        }
+        // Show error
+        setError(result.error || 'Authentication failed. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('>>> Auth error:', err);
+      setError(err.message || 'Authentication failed. Please try again.');
+    } finally {
       setIsLoading(false);
-      handleClose();
-      // Navigate to onboarding flow
-      setTimeout(() => {
-        router.push('/(onboarding-new)/verify-email');
-      }, 400);
-    }, 500);
+    }
   };
 
   const handleGoogleAuth = async () => {
@@ -313,7 +354,7 @@ export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetPro
                   (!email || !password || (isSignUp && password !== confirmPassword)) && styles.authButtonDisabled
                 ]}
                 onPress={handleAuth}
-                disabled={!email || !password || isLoading || (isSignUp && password !== confirmPassword)}
+                disabled={isLoading || !email || !password || (isSignUp && password !== confirmPassword)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.authButtonText}>
@@ -321,15 +362,36 @@ export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetPro
                 </Text>
               </TouchableOpacity>
 
+              {/* Error Message */}
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{error}</Text>
+                  {showGoogleSuggestion && (
+                    <TouchableOpacity
+                      style={styles.googleSuggestionButton}
+                      onPress={handleGoogleAuth}
+                      disabled={isGoogleLoading || authLoading}
+                      activeOpacity={0.8}
+                    >
+                      {isGoogleLoading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="logo-google" size={18} color="#FFFFFF" />
+                          <Text style={styles.googleSuggestionText}>Sign in with Google</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null}
+
               {/* Divider */}
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>or</Text>
                 <View style={styles.dividerLine} />
               </View>
-
-              {/* Error Message */}
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               {/* Google Button */}
               <TouchableOpacity
@@ -517,5 +579,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Outfit-SemiBold',
     color: '#1A1A1A',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  googleSuggestionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4285F4',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 8,
+  },
+  googleSuggestionText: {
+    fontSize: 14,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
   },
 });

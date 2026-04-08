@@ -33,6 +33,7 @@ import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import ConversationalInput from '@/components/get-rolling/ConversationalInput';
 import AnimatedText from '@/components/get-rolling/AnimatedText';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
+import { updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // Teal/Ocean aurora - Calming & Supportive
 const AURORA_GRADIENT = ['#E0F0F8', '#B8E0E8', '#68A8B8', '#385868', '#182830', '#80C8D8'] as const;
@@ -198,8 +199,18 @@ export default function ChallengesScreen() {
     ExpoSpeechRecognitionModule.stop();
   };
 
-  const handleNext = () => router.push('/(get-rolling)/style');
-  const handleClose = () => router.push('/(get-rolling)/style');
+  const handleNext = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ challenge: userResponse });
+    }
+    router.push('/(get-rolling)/style');
+  };
+  const handleClose = async () => {
+    if (userResponse) {
+      await updateOnboardingData({ challenge: userResponse });
+    }
+    router.push('/(get-rolling)/style');
+  };
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,

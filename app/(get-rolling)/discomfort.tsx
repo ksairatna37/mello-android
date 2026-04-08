@@ -25,7 +25,7 @@ import AuroraGradient from '@/components/common/AuroraGradient';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import SelectionCard from '@/components/get-rolling/SelectionCard';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
-import { getOnboardingData, updateOnboardingData } from '@/utils/onboardingStorage';
+import { getOnboardingData, updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION - Reflect their words, never interpret
@@ -113,8 +113,9 @@ export default function DiscomfortScreen() {
   const [primaryFeeling, setPrimaryFeeling] = useState<string>('default');
   const [moodIntensity, setMoodIntensity] = useState<number>(0);
 
-  // Load onboarding data for personalization
+  // Save current step + load persisted data
   useEffect(() => {
+    saveCurrentStep('get-rolling/discomfort');
     const loadPersonalization = async () => {
       const data = await getOnboardingData();
 
@@ -132,6 +133,10 @@ export default function DiscomfortScreen() {
         } else {
           setPrimaryFeeling('multiple');
         }
+      }
+
+      if (data.discomfortReasons?.length) {
+        setSelectedOptions(data.discomfortReasons);
       }
     };
 

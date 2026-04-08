@@ -10,7 +10,7 @@
  * - User feels in control of their data
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ import Animated, {
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
 import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
-import { updateOnboardingData, completeOnboarding } from '@/utils/onboardingStorage';
+import { updateOnboardingData, saveCurrentStep, getOnboardingData, completeOnboarding } from '@/utils/onboardingStorage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CURRENT_STEP = 8;
@@ -134,17 +134,34 @@ export default function PermissionsScreen() {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [healthDataEnabled, setHealthDataEnabled] = useState(false);
 
+  // Save current step + load persisted data
+  useEffect(() => {
+    saveCurrentStep('permissions');
+    const load = async () => {
+      const data = await getOnboardingData();
+      if (data.notificationsEnabled) setNotificationsEnabled(true);
+      if (data.microphoneEnabled) setMicrophoneEnabled(true);
+    };
+    load();
+  }, []);
+
   const handleBack = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding-new)/terms-trust');
+    }
   };
 
   const handleContinue = async () => {
-    // Save permissions and complete onboarding
+    // Save permissions and mark onboarding complete locally
+    // (Full sync to backend happens at end of get-rolling flow)
     await updateOnboardingData({
       notificationsEnabled,
       microphoneEnabled,
     });
     await completeOnboarding();
+
     router.push('/(onboarding-new)/personalizing' as any);
   };
 
