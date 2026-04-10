@@ -3,8 +3,8 @@
  * Centralized endpoint configuration
  */
 
-// Base URL for Mello backend
-export const API_BASE_URL = 'https://new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io';
+// Base URL for Mello backend (AWS)
+export const API_BASE_URL = 'https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws';
 
 // Auth endpoints
 export const ENDPOINTS = {

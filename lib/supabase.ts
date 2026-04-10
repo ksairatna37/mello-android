@@ -11,8 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 // Supabase configuration
-const SUPABASE_URL = 'https://drepvbrhkxzwtwqncnyd.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZXB2YnJoa3h6d3R3cW5jbnlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjkzOTczMjQsImV4cCI6MjA0NDk3MzMyNH0.OJCaAJBAxZfrydgUfm1A_ECFL3uCOmYX33rjCETcNQw';
+const SUPABASE_URL = 'https://qoxtkiainkokmlyakwgu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFveHRraWFpbmtva21seWFrd2d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTI1OTUsImV4cCI6MjA5MTM2ODU5NX0.ES-6GCxYswMt-0jlvez6ckJ9wU6H-klNFrAjblFBwgc';
 
 /**
  * AsyncStorage adapter for Supabase auth

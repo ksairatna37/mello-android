@@ -188,6 +188,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Fetch user profile by email (for email auth users)
+   */
+  const fetchProfileByEmail = useCallback(async (email: string) => {
+    console.log('>>> fetchProfileByEmail called for:', email);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email_id', email.trim())
+        .maybeSingle();
+
+      if (error) {
+        console.error('>>> Error fetching profile by email:', error.message, error.code, JSON.stringify(error));
+        return null;
+      }
+
+      if (data) {
+        console.log('>>> Found profile for email user:', data.email_id, 'first_login:', data.first_login);
+        setProfile(data as Profile);
+        return data as Profile;
+      }
+
+      // No profile yet (new user)
+      console.log('>>> No profile found for email:', email);
+      return null;
+    } catch (err: any) {
+      console.error('>>> Exception in fetchProfileByEmail:', err?.message || err);
+      return null;
+    }
+  }, []);
+
+  /**
    * Check user status in profiles table
    * Returns: -1 (new), 0 (incomplete onboarding), 1 (complete)
    */
@@ -648,26 +680,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
       await fetchProfile(user.id);
+    } else if (emailUser?.email) {
+      await fetchProfileByEmail(emailUser.email);
     }
-  }, [user?.id, fetchProfile]);
+  }, [user?.id, emailUser?.email, fetchProfile, fetchProfileByEmail]);
 
   /**
    * Mark onboarding as complete and navigate to main app
+   * Works for both Google (user.id) and email (emailUser.email) users
    */
   const completeOnboarding = useCallback(async () => {
-    if (!user?.id) {
+    const currentEmail = user?.email || emailUser?.email;
+
+    if (!user?.id && !currentEmail) {
       console.error('>>> No user to complete onboarding for');
       return;
     }
 
-    console.log('>>> Completing onboarding for user:', user.id);
+    console.log('>>> Completing onboarding for:', user?.id || currentEmail);
 
     try {
-      // Update profile to mark onboarding complete
-      const { error } = await supabase
-        .from('profiles')
-        .update({ first_login: true })
-        .eq('id', user.id);
+      let error;
+
+      if (user?.id) {
+        // Google user - update by id
+        const result = await supabase
+          .from('profiles')
+          .update({ first_login: true })
+          .eq('id', user.id);
+        error = result.error;
+      } else if (currentEmail) {
+        // Email user - update by email_id
+        const result = await supabase
+          .from('profiles')
+          .update({ first_login: true })
+          .eq('email_id', currentEmail);
+        error = result.error;
+      }
 
       if (error) {
         console.error('>>> Error updating profile:', error);
@@ -677,7 +726,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('>>> Onboarding marked complete');
 
       // Refresh profile to get updated data
-      await fetchProfile(user.id);
+      if (user?.id) {
+        await fetchProfile(user.id);
+      } else if (currentEmail) {
+        await fetchProfileByEmail(currentEmail);
+      }
 
       // Navigate to main app
       router.replace(DEFAULT_MAIN_ROUTE as any);
@@ -685,7 +738,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('>>> Error completing onboarding:', error);
       throw error;
     }
-  }, [user?.id, fetchProfile, router]);
+  }, [user?.id, user?.email, emailUser?.email, fetchProfile, fetchProfileByEmail, router]);
 
   /**
    * Initialize auth state listener
@@ -712,9 +765,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedSession = await getSession();
       if (storedSession && storedSession.loginStatus) {
         console.log('>>> Found stored email session:', storedSession.email);
-        setEmailUser({ email: storedSession.email, provider: 'email' });
+        setEmailUser({ email: storedSession.email, userId: storedSession.userId, provider: 'email' });
         setAuthProvider('email');
-        // Note: No profile fetch for email users (different backend)
+        // Fetch profile for email users from Supabase
+        await fetchProfileByEmail(storedSession.email);
       } else {
         console.log('>>> No active session found');
       }
@@ -751,7 +805,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [fetchProfile, handlePostAuthNavigation]);
+  }, [fetchProfile, fetchProfileByEmail, handlePostAuthNavigation]);
 
   const value: AuthContextType = {
     // State

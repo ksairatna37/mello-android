@@ -4,14 +4,14 @@
     "slug": "mello",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/mello-app-icon.png",
     "scheme": "mello",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1B9AAA"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,

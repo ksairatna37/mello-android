@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentStep } from '@/utils/onboardingStorage';
 
 // DEV MODE: Set to true to skip onboarding and go directly to Get Rolling
-const DEV_SKIP_TO_GET_ROLLING = false;
+const DEV_SKIP_TO_GET_ROLLING = true;
 
 // INVESTOR DEMO: Redirect to voice instead of chat (chat is disabled)
 const DEMO_REDIRECT_TO_VOICE = false;
