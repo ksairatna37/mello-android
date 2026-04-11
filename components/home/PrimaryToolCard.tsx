@@ -51,8 +51,16 @@ export default function PrimaryToolCard({
         scale.value = withTiming(1, TIMING);
       }}
     >
-      <View style={[styles.iconCircle, { backgroundColor: accentColor + '25' }]}>
-        <Ionicons name={icon} size={28} color={accentColor} />
+      <View
+        style={[
+          styles.iconCircle,
+          {
+            backgroundColor: accentColor + '32',
+            borderColor: accentColor + '66',
+          },
+        ]}
+      >
+        <Ionicons name={icon} size={32} color={accentColor} />
       </View>
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
@@ -77,10 +85,11 @@ const styles = StyleSheet.create({
     ...CARD_SHADOW,
   },
   iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: 'center',
+    borderWidth: 1,
     justifyContent: 'center',
   },
   content: {

@@ -266,7 +266,7 @@ export default function HomeScreen() {
                 style={styles.heroPill}
               >
                 <Ionicons name="sparkles-outline" size={14} color={LIGHT_THEME.textPrimary} />
-                <Text style={styles.heroPillText}>Your space</Text>
+                <Text style={styles.heroPillText}>Your safe space</Text>
               </Pressable>
             </View>
 
@@ -276,12 +276,6 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.heroActions}>
-              <Pressable
-                onPress={() => router.navigate('/(main)/chat')}
-                style={[styles.heroActionButton, styles.heroActionPrimary]}
-              >
-                <Text style={styles.heroActionPrimaryText}>Talk to mello</Text>
-              </Pressable>
               <Pressable
                 onPress={() => router.navigate('/(main)/journal')}
                 style={[styles.heroActionButton, styles.heroActionSecondary]}
@@ -479,7 +473,7 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    gap: 22,
+    gap: 16,
     paddingHorizontal: 14,
   },
 
@@ -488,9 +482,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: 28,
     borderWidth: 0,
-    gap: 18,
+    gap: 12,
     overflow: 'hidden',
-    padding: 20,
+    padding: 14,
     position: 'relative',
   },
 
@@ -577,32 +571,20 @@ const styles = StyleSheet.create({
 
   heroActions: {
     flexDirection: 'row',
-    gap: 12,
   },
 
   heroActionButton: {
     alignItems: 'center',
     borderRadius: 18,
-    flex: 1,
     justifyContent: 'center',
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-
-  heroActionPrimary: {
-    backgroundColor: LIGHT_THEME.textPrimary,
+    minHeight: 44,
+    paddingHorizontal: 22,
   },
 
   heroActionSecondary: {
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderColor: 'rgba(232, 230, 240, 0.9)',
     borderWidth: 1,
-  },
-
-  heroActionPrimaryText: {
-    color: LIGHT_THEME.textInverse,
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 15,
   },
 
   heroActionSecondaryText: {
@@ -612,7 +594,7 @@ const styles = StyleSheet.create({
   },
 
   sectionBlock: {
-    gap: 12,
+    gap: 8,
   },
 
   sectionHeader: {

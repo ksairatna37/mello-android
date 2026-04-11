@@ -127,6 +127,14 @@ function formatDuration(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function getVoiceGreeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Ready to talk\nthis morning?';
+  if (h >= 12 && h < 17) return "What's on your\nmind today?";
+  if (h >= 17 && h < 21) return 'Ready to talk\nthis evening?';
+  return 'Ready to talk\ntonight?';
+}
+
 // Memoized message item — only animates the latest new message
 const ChatBubble = React.memo(({ item, isNew }: { item: ChatMessage; isNew: boolean }) => {
   const isUser = item.role === 'user';
@@ -753,7 +761,7 @@ export default function VoiceAgentScreen() {
           style={styles.mascotImage}
         />
       </View>
-      <Text style={styles.idleTitle}>talk to mello</Text>
+      <Text style={styles.idleGreeting}>{getVoiceGreeting()}</Text>
       <View style={styles.voiceSelector}>
         <Text style={styles.voiceSelectorLabel}>language</Text>
         <View style={styles.voiceChips}>
@@ -808,14 +816,22 @@ export default function VoiceAgentScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <View style={styles.container}>
       {/* Animated gradient background */}
       <MelloGradient speaker={gradientSpeaker} />
 
-      {/* Info button — always visible */}
-      <Pressable style={styles.infoButton}>
-        <Ionicons name="information-circle-outline" size={28} color="#9999a8" />
-      </Pressable>
+      {/* Header — hamburger + mello logo + info button */}
+      <View style={[styles.voiceHeader, { paddingTop: insets.top + 12 }]}>
+        <Pressable style={styles.voiceHeaderBtn} hitSlop={8}>
+          <Ionicons name="menu" size={24} color="#1A1A1A" />
+        </Pressable>
+        <View style={styles.voiceHeaderCenter}>
+          <Text style={styles.voiceLogoText}>mello</Text>
+        </View>
+        <Pressable style={styles.voiceHeaderBtn} hitSlop={8}>
+          <Ionicons name="information-circle-outline" size={22} color="#1A1A1A" />
+        </Pressable>
+      </View>
 
       {/* Timer — self-contained, ticks don't re-render chat */}
       {callState === 'active' && (
@@ -935,12 +951,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  infoButton: {
-    position: 'absolute',
-    top: 38,
-    right: 8,
-    padding: 8,
-    zIndex: 10,
+  // ── Voice Header ──
+  voiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 12,
+  },
+  voiceHeaderBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  voiceLogoText: {
+    fontFamily: 'Playwrite',
+    fontSize: 26,
+    color: '#1A1A1A',
+    lineHeight: 32,
   },
 
   // Timer
@@ -1052,10 +1083,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 24,
   },
-  idleTitle: {
-    fontSize: 20,
-    fontFamily: 'Outfit-Medium',
-    color: LIGHT_THEME.textSecondary,
+  idleGreeting: {
+    fontSize: 32,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    lineHeight: 42,
   },
   voiceSelector: {
     alignItems: 'center',
