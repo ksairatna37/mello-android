@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -31,9 +32,11 @@ import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import { LIGHT_THEME } from '@/components/common/LightGradient';
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { fullscreenStore } from '@/utils/fullscreenStore';
+import { sidebarStore } from '@/utils/sidebarStore';
 import TranscriptIcon from './TranscriptIcon';
 import HindiVoiceScreen from './HindiVoiceScreen';
 import InterventionIndicator from './InterventionIndicator';
+import VoiceInfoSheet from './VoiceInfoSheet';
 import {
   detectIntervention,
   getInitialInterventionDetectorState,
@@ -209,6 +212,7 @@ export default function VoiceAgentScreen() {
   const [showHindiScreen, setShowHindiScreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showCrisisWarning, setShowCrisisWarning] = useState(false);
+  const [showInfoSheet, setShowInfoSheet] = useState(false);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -244,6 +248,11 @@ export default function VoiceAgentScreen() {
     if (isUserSpeaking) return 'user' as const;
     return 'mello' as const;
   }, [callState, isUserSpeaking]);
+
+  // Close sidebar when leaving the voice tab
+  useFocusEffect(useCallback(() => {
+    return () => { sidebarStore.close(); };
+  }, []));
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -822,13 +831,13 @@ export default function VoiceAgentScreen() {
 
       {/* Header — hamburger + mello logo + info button */}
       <View style={[styles.voiceHeader, { paddingTop: insets.top + 12 }]}>
-        <Pressable style={styles.voiceHeaderBtn} hitSlop={8}>
+        <Pressable style={styles.voiceHeaderBtn} hitSlop={8} onPress={sidebarStore.open}>
           <Ionicons name="menu" size={24} color="#1A1A1A" />
         </Pressable>
         <View style={styles.voiceHeaderCenter}>
           <Text style={styles.voiceLogoText}>mello</Text>
         </View>
-        <Pressable style={styles.voiceHeaderBtn} hitSlop={8}>
+        <Pressable style={styles.voiceHeaderBtn} hitSlop={8} onPress={() => setShowInfoSheet(true)}>
           <Ionicons name="information-circle-outline" size={22} color="#1A1A1A" />
         </Pressable>
       </View>
@@ -941,6 +950,8 @@ export default function VoiceAgentScreen() {
           </Pressable>
         )}
       </View>
+
+      <VoiceInfoSheet visible={showInfoSheet} onClose={() => setShowInfoSheet(false)} />
     </View>
   );
 }
@@ -972,6 +983,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     color: '#1A1A1A',
     lineHeight: 32,
+    marginBottom: 10,
   },
 
   // Timer

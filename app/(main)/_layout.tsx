@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSyncExternalStore } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname, router } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,6 +23,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import FloatingTabBar from '@/components/home/FloatingTabBar';
 import { fullscreenStore } from '@/utils/fullscreenStore';
+import { sidebarStore } from '@/utils/sidebarStore';
+import { chatNavStore } from '@/utils/chatNavStore';
+import ChatSidebar from '@/components/chat/ChatSidebar';
+import type { ChatSession } from '@/services/chat/sessionHistory';
 
 const CONTENT_RADIUS = 28;
 const FULL_SCREEN_ROUTES = new Set(['/breathing']);
@@ -38,6 +42,21 @@ export default function MainLayout() {
     fullscreenStore.getSnapshot,
   );
   const isFullScreen = isRouteFullScreen || isExternalFullScreen;
+
+  // Sidebar state — subscribed here so one ChatSidebar instance serves all tabs
+  const sidebar = useSyncExternalStore(sidebarStore.subscribe, sidebarStore.getSnapshot);
+
+  const handleSidebarNewChat = useCallback(() => {
+    sidebarStore.close();
+    chatNavStore.push({ type: 'new-chat' });
+    router.navigate('/chat');
+  }, []);
+
+  const handleSidebarSelectSession = useCallback((session: ChatSession) => {
+    sidebarStore.close();
+    chatNavStore.push({ type: 'select-session', session });
+    router.navigate('/chat');
+  }, []);
 
   // Measure tab bar height once via onLayout
   const [tabBarHeight, setTabBarHeight] = useState(0);
@@ -110,6 +129,18 @@ export default function MainLayout() {
           <Tabs.Screen name="journal" options={{ href: null }} />
           <Tabs.Screen name="breathing" options={{ href: null }} />
         </Tabs>
+
+        {/* Sidebar — absolute overlay inside contentCard so the tab bar
+            (later sibling) naturally sits on top, same z-order as before. */}
+        <ChatSidebar
+          visible={sidebar.isOpen}
+          currentSessionId={sidebar.currentSessionId}
+          currentTitle={sidebar.currentTitle}
+          userEmail={sidebar.userEmail}
+          onClose={sidebarStore.close}
+          onNewChat={handleSidebarNewChat}
+          onSelectSession={handleSidebarSelectSession}
+        />
       </Animated.View>
 
       {/* Tab bar — always in layout, GPU-only animation.

@@ -16,6 +16,7 @@ import React, {
   useCallback,
   useMemo,
   memo,
+  useSyncExternalStore,
 } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
@@ -43,10 +44,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { CARD_SHADOW } from '@/components/common/LightGradient';
 import { fullscreenStore } from '@/utils/fullscreenStore';
+import { sidebarStore } from '@/utils/sidebarStore';
+import { chatNavStore } from '@/utils/chatNavStore';
 import TypewriterText from './TypewriterText';
 import LoadingDots from './LoadingDots';
-import ChatSidebar from './ChatSidebar';
 import { MicButton, RecordingBar, OnboardingModal, useVoiceMic } from './VoiceMicButton';
+import FadingScrollWrapper from '@/components/get-rolling/ScrollFadeEdges';
 
 import { sendToBedrock, generateChatTitle as aiGenerateChatTitle } from '@/services/chat/bedrockService';
 import { loadChat, saveChat, toStoredMessages, fromStoredMessages } from '@/services/chat/chatApi';
@@ -282,7 +285,6 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [isIncognito, setIsIncognito] = useState(false);
@@ -325,12 +327,21 @@ export default function ChatScreen() {
     return () => { fullscreenStore.set(false); };
   }, []);
 
-  // Close sidebar when navigating away from chat tab
+  // Close sidebar when leaving the chat tab
   useFocusEffect(
     useCallback(() => {
-      return () => { setIsSidebarOpen(false); };
+      return () => { sidebarStore.close(); };
     }, [])
   );
+
+  // Keep sidebar context up to date so it highlights the active session
+  useEffect(() => {
+    sidebarStore.setContext({ currentSessionId: sessionId, currentTitle: chatTitle, userEmail });
+  }, [sessionId, chatTitle, userEmail]);
+
+  // Sidebar nav requests — subscribe here (hooks must be unconditional/ordered)
+  // The useEffect that *acts* on pendingNav is placed after handleNewChat/handleSelectSession
+  const pendingNav = useSyncExternalStore(chatNavStore.subscribe, chatNavStore.getSnapshot);
 
   const visibleMessages = useMemo(
     () => messages.filter((m) => m.id !== 'welcome'),
@@ -506,6 +517,17 @@ export default function ChatScreen() {
     setErrorText(null);
   }, []);
 
+  // Act on sidebar nav requests — placed after handleNewChat/handleSelectSession to avoid TDZ
+  useEffect(() => {
+    if (!pendingNav) return;
+    chatNavStore.clear();
+    if (pendingNav.type === 'new-chat') {
+      handleNewChat();
+    } else if (pendingNav.type === 'select-session') {
+      handleSelectSession(pendingNav.session);
+    }
+  }, [pendingNav, handleNewChat, handleSelectSession]);
+
   const handleDelete = useCallback(() => {
     setIsMenuOpen(false);
     Alert.alert('Delete chat', 'Are you sure you want to delete this conversation?', [
@@ -617,20 +639,14 @@ export default function ChatScreen() {
   // ═══════════════════════════════════════════════════
 
   const paddingTop = insets.top + 12;
+  const headerSubtitleText = isIncognito
+    ? 'Incognito chat'
+    : chatState === 'active'
+      ? chatTitle
+      : '';
 
   return (
     <View style={styles.root}>
-      {/* ── Sidebar ── */}
-      <ChatSidebar
-        visible={isSidebarOpen}
-        currentSessionId={sessionId}
-        currentTitle={chatTitle}
-        userEmail={userEmail}
-        onClose={() => setIsSidebarOpen(false)}
-        onNewChat={handleNewChat}
-        onSelectSession={handleSelectSession}
-      />
-
       {/* ── Mic onboarding modal ── */}
       <OnboardingModal
         visible={showMicOnboarding}
@@ -666,7 +682,7 @@ export default function ChatScreen() {
       >
         {/* ── Header ── */}
         <View style={[styles.header, { paddingTop }]}>
-          <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => setIsSidebarOpen(true)}>
+          <Pressable style={styles.headerBtn} hitSlop={8} onPress={sidebarStore.open}>
             <Ionicons name="menu" size={24} color="#1A1A1A" />
           </Pressable>
 
@@ -674,7 +690,7 @@ export default function ChatScreen() {
             <Text style={styles.logoText}>mello</Text>
             <Animated.View style={subtitleAnimStyle}>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {isIncognito ? 'Incognito chat' : chatTitle}
+                {headerSubtitleText}
               </Text>
             </Animated.View>
           </View>
@@ -716,17 +732,19 @@ export default function ChatScreen() {
               </Text>
             </View>
           ) : (
-            /* Message list */
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.messageList}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={renderFooter}
-              removeClippedSubviews={false}
-            />
+            /* Message list — fading edges for premium feel */
+            <FadingScrollWrapper topFadeHeight={32} bottomFadeHeight={48}>
+              <FlatList
+                ref={flatListRef}
+                data={messages}
+                renderItem={renderMessage}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.messageList}
+                showsVerticalScrollIndicator={false}
+                ListFooterComponent={renderFooter}
+                removeClippedSubviews={false}
+              />
+            </FadingScrollWrapper>
           )}
         </Animated.View>
 
@@ -857,6 +875,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     color: '#1A1A1A',
     lineHeight: 32,
+    marginBottom: 10,
   },
   headerSubtitle: {
     fontFamily: 'Outfit-Regular',
@@ -958,14 +977,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
-    gap: 20,
+    gap: 10,
   },
   rowUser: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
   userBubble: {
-    backgroundColor: '#ECEAEC',
+    backgroundColor: '#ffffffad',
     borderRadius: 20,
     borderBottomRightRadius: 4,
     paddingHorizontal: 16,
