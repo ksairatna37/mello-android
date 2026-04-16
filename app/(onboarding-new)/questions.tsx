@@ -29,6 +29,9 @@ import Animated, {
   scrollTo,
   withTiming,
   withSpring,
+  withSequence,
+  withDelay, // ✅ ADD THIS
+  cancelAnimation,
   runOnJS,
   Easing,
   interpolateColor,
@@ -41,7 +44,6 @@ import * as Battery from 'expo-battery';
 import MelloGradient from '@/components/common/MelloGradient';
 import { updateOnboardingData, saveCurrentStep } from '@/utils/onboardingStorage';
 import type { OnboardingData } from '@/utils/onboardingStorage';
-import { Colors } from '@/constants/colors';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -59,9 +61,9 @@ interface Question {
   id: string;
   title: string;
   subtitle: string;
-  storageKey: keyof OnboardingData;
+  storageKey?: keyof OnboardingData;
   options: Option[];
-  type?: 'options' | 'battery';
+  type?: 'options' | 'battery' | 'fact';
 }
 
 // ─── Questions ────────────────────────────────────────────────────────────────
@@ -99,12 +101,12 @@ const QUESTIONS: Question[] = [
     title: "It's 2am. You can't sleep. What's actually going on?",
     subtitle: "Tap the one that fits.",
     options: [
-      { id: 'loop',      icon: 'refresh-outline',        label: 'The Loop',      description: 'Same thoughts. Over and over. Won\'t stop.' },
-      { id: 'ache',      icon: 'pulse-outline',           label: 'The Ache',      description: 'Something hurts but I can\'t explain what.' },
-      { id: 'replay',    icon: 'play-back-outline',       label: 'The Replay',    description: 'Going over a conversation I can\'t undo.' },
-      { id: 'overwhelm', icon: 'layers-outline',          label: 'The Overwhelm', description: 'Everything at once. Don\'t know where to start.' },
-      { id: 'void',      icon: 'remove-circle-outline',   label: 'The Void',      description: 'Nothing. Just... empty. And that feels worse.' },
-      { id: 'wander',    icon: 'map-outline',             label: 'The Wander',    description: 'I\'m fine, I just stumbled here.' },
+      { id: 'loop', icon: 'refresh-outline', label: 'The Loop', description: "Same thoughts. Over and over. Won't stop." },
+      { id: 'ache', icon: 'pulse-outline', label: 'The Ache', description: "Something hurts but I can't explain what." },
+      { id: 'replay', icon: 'play-back-outline', label: 'The Replay', description: "Going over a conversation I can't undo." },
+      { id: 'overwhelm', icon: 'layers-outline', label: 'The Overwhelm', description: "Everything at once. Don't know where to start." },
+      { id: 'void', icon: 'remove-circle-outline', label: 'The Void', description: 'Nothing. Just... empty. And that feels worse.' },
+      { id: 'wander', icon: 'map-outline', label: 'The Wander', description: "I'm fine, I just stumbled here." },
     ],
   },
   {
@@ -113,23 +115,29 @@ const QUESTIONS: Question[] = [
     title: "If you could text yourself from 6 months ago...",
     subtitle: "Tap to finish the sentence 💬",
     options: [
-      { id: 'okay',     icon: 'heart-outline',         label: '"Hey. You\'re going to be okay. Just—"',         description: '' },
-      { id: 'alone',    icon: 'people-outline',         label: '"Stop carrying everything alone."',              description: '' },
-      { id: 'figured',  icon: 'help-circle-outline',    label: '"It\'s okay that you don\'t have it figured out."', description: '' },
-      { id: 'grown',    icon: 'leaf-outline',           label: '"You\'ve grown more than you know."',            description: '' },
-      { id: 'avoiding',      icon: 'alarm-outline',   label: '"The thing you\'re avoiding? It\'s time."', description: '' },
-      { id: 'custom_input', icon: 'pencil-outline',  label: 'or write on your own...',                  description: '', isCustomInput: true },
+      { id: 'okay', icon: 'heart-outline', label: '"Hey. You\'re going to be okay. Just—"', description: '' },
+      { id: 'alone', icon: 'people-outline', label: '"Stop carrying everything alone."', description: '' },
+      { id: 'figured', icon: 'help-circle-outline', label: '"It\'s okay that you don\'t have it figured out."', description: '' },
+      { id: 'grown', icon: 'leaf-outline', label: '"You\'ve grown more than you know."', description: '' },
+      { id: 'avoiding', icon: 'alarm-outline', label: '"The thing you\'re avoiding? It\'s time."', description: '' },
+      { id: 'custom_input', icon: 'pencil-outline', label: 'or write on your own...', description: '', isCustomInput: true },
     ],
   },
   {
     id: 'emotional_battery',
     storageKey: 'emotionalBattery',
     title: 'How full is your emotional battery right now?',
-    subtitle: "Take a moment to tune in. There's no right or wrong answer — just where you are.",
+    subtitle: "Take a moment to tune in.",
     type: 'battery',
     options: [],
   },
-  // Q6–Q10 will be added here
+  {
+    id: 'did_you_know',
+    title: '',
+    subtitle: '',
+    type: 'fact',
+    options: [],
+  },
 ];
 
 const TOTAL_QUESTIONS = 10;
@@ -152,10 +160,9 @@ export default function QuestionsScreen() {
   useEffect(() => {
     Battery.getBatteryLevelAsync()
       .then((level) => { if (level >= 0) setDeviceBatteryPct(Math.round(level * 100)); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
-  // Drive scroll position from shared value — enables custom easing via withTiming
   useDerivedValue(() => {
     scrollTo(aScrollRef, 0, scrollY.value, false);
   });
@@ -175,7 +182,6 @@ export default function QuestionsScreen() {
     setTimeout(() => { scrollLock.current = false; }, 700);
   }, []);
 
-  // Each page calls back with its own index so no stale closure issues
   const handleBack = useCallback((fromIndex: number) => {
     if (fromIndex > 0) {
       scrollToIndex(fromIndex - 1);
@@ -187,17 +193,16 @@ export default function QuestionsScreen() {
   const handleSelect = useCallback(
     async (question: Question, optionId: string, qIndex: number) => {
       if (scrollLock.current) return;
-      // Lock immediately to prevent double-tap during animation
       scrollLock.current = true;
       setAnswers((prev) => ({ ...prev, [question.id]: optionId }));
-      // Fire-and-forget storage write
-      updateOnboardingData({ [question.storageKey]: optionId } as Partial<OnboardingData>);
+      if (question.storageKey) {
+        updateOnboardingData({ [question.storageKey]: optionId } as Partial<OnboardingData>);
+      }
 
       const nextIndex = qIndex + 1;
-      // Wait for checkbox animation (180ms) + intentional pause (500ms)
       setTimeout(async () => {
         if (nextIndex < QUESTIONS.length) {
-          scrollLock.current = false; // release so scrollToIndex can re-lock
+          scrollLock.current = false;
           scrollToIndex(nextIndex);
         } else {
           scrollLock.current = false;
@@ -218,7 +223,6 @@ export default function QuestionsScreen() {
   const handleWriteSheetSubmit = useCallback((text: string) => {
     const question = QUESTIONS[writeSheetQIndex];
     setWriteSheetVisible(false);
-    // Wait for sheet to close, then simultaneously reveal custom text + select
     setTimeout(() => {
       setCustomTexts((prev) => ({ ...prev, [question.id]: text }));
       updateOnboardingData({ textToSelfCustom: text });
@@ -232,7 +236,6 @@ export default function QuestionsScreen() {
 
       <MelloGradient />
 
-      {/* Each page owns its header — whole page scrolls together */}
       <Animated.ScrollView
         ref={aScrollRef}
         scrollEnabled={false}
@@ -246,11 +249,11 @@ export default function QuestionsScreen() {
             key={question.id}
             question={question}
             qIndex={qIndex}
+            currentIndex={currentIndex}
             answer={answers[question.id]}
             customTexts={customTexts}
             topInset={insets.top}
             bottomInset={insets.bottom}
-
             deviceBatteryPct={deviceBatteryPct}
             onSelect={handleSelect}
             onBack={handleBack}
@@ -286,7 +289,7 @@ function OptionCard({
   onPress: () => void;
 }) {
   const anim = useSharedValue(selected ? 1 : 0);
-  const dimAnim = useSharedValue(dimmed ? 0 : 1);
+  const dimAnim = useSharedValue(dimmed ? 0.5 : 1);
 
   useEffect(() => {
     anim.value = withTiming(selected ? 1 : 0, {
@@ -319,12 +322,10 @@ function OptionCard({
     color: interpolateColor(anim.value, [0, 1], ['#9999A8', '#8B7EF8']),
   }));
 
-
   return (
     <Animated.View style={wrapperStyle}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
         <Animated.View style={[styles.optionCard, cardStyle]}>
-          {/* Icon — snaps colour with anim; fast enough at 180ms to feel smooth */}
           <View style={styles.iconBadge}>
             <Ionicons
               name={option.icon as any}
@@ -350,7 +351,6 @@ function OptionCard({
               </Animated.Text>
             )}
           </View>
-
         </Animated.View>
       </TouchableOpacity>
     </Animated.View>
@@ -362,6 +362,7 @@ function OptionCard({
 interface QuestionPageProps {
   question: Question;
   qIndex: number;
+  currentIndex: number;
   answer: string | undefined;
   customTexts: Record<string, string>;
   topInset: number;
@@ -375,6 +376,7 @@ interface QuestionPageProps {
 function QuestionPage({
   question,
   qIndex,
+  currentIndex,
   answer,
   customTexts,
   topInset,
@@ -384,21 +386,18 @@ function QuestionPage({
   onBack,
   onOpenWriteSheet,
 }: QuestionPageProps) {
+  const isCurrent = currentIndex === qIndex;
   const progressWidth = ((qIndex + 1) / TOTAL_QUESTIONS) * 100;
 
   return (
     <View style={[styles.page, { height: SCREEN_HEIGHT }]}>
-
-      {/* ── Header (scrolls with the page) ── */}
       <View style={[styles.header, { paddingTop: topInset + 8 }]}>
-        {/* Progress bar — padded, rounded corners */}
         <View style={styles.progressWrapper}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progressWidth}%` }]} />
           </View>
         </View>
 
-        {/* Counter row */}
         <View style={styles.counterRow}>
           <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => onBack(qIndex)}>
             <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
@@ -408,16 +407,18 @@ function QuestionPage({
         </View>
       </View>
 
-      {/* ── Question content ── */}
       <View style={[styles.content, { paddingBottom: bottomInset + 20 }]}>
-        <Text style={styles.questionTitle}>{question.title}</Text>
-        <Text style={styles.questionSubtitle}>{question.subtitle}</Text>
+        {question.type !== 'fact' && <Text style={styles.questionTitle}>{question.title}</Text>}
+        {question.type !== 'fact' && <Text style={styles.questionSubtitle}>{question.subtitle}</Text>}
 
         {question.type === 'battery' ? (
           <BatterySlider
+            key={`battery-${isCurrent ? 'active' : 'inactive'}`}
             initialPct={answer ? Number(answer) : deviceBatteryPct}
             onConfirm={(pct) => onSelect(question, String(pct), qIndex)}
           />
+        ) : question.type === 'fact' ? (
+          <DidYouKnow onContinue={() => onSelect(question, 'seen', qIndex)} />
         ) : (
           <View style={styles.optionsContainer}>
             {question.options.map((option) => (
@@ -442,7 +443,6 @@ function QuestionPage({
 }
 
 // ─── Battery Slider ───────────────────────────────────────────────────────────
-// Wide battery with % centered inside, purple gradient fill matching background
 
 const BATTERY_BODY_H = 360;
 const BATTERY_BODY_W = 200;
@@ -450,12 +450,17 @@ const BATTERY_BORDER_W = 8;
 const BATTERY_BODY_RADIUS = 50;
 const BATTERY_GAP = 8;
 const BATTERY_INNER_RADIUS = 35;
-const BATTERY_FILL_MAX_H = BATTERY_BODY_H - (BATTERY_BORDER_W * 2) - (BATTERY_GAP * 2);
+const BATTERY_FILL_MAX_H = BATTERY_BODY_H - BATTERY_BORDER_W * 2 - BATTERY_GAP * 2;
 
-// Purple gradient that matches the MelloGradient background
 const BATTERY_COLORS = {
-  inputRange:  [0,         0.25,      0.5,       0.75,      1        ],
+  inputRange: [0, 0.25, 0.5, 0.75, 1],
   outputRange: ['#E0D4F7', '#D4C4F8', '#C5B0F8', '#B69DF8', '#9D84F8'],
+};
+
+// Border color: white at rest → level color on confirm
+const BORDER_COLORS = {
+  inputRange: [0, 1],
+  outputRange: ['rgba(255,255,255,0.85)', '#9D84F8'],
 };
 
 function BatterySlider({
@@ -465,38 +470,160 @@ function BatterySlider({
   initialPct: number;
   onConfirm: (pct: number) => void;
 }) {
-  const safeInitial = (typeof initialPct === 'number' && !isNaN(initialPct) && initialPct >= 0 && initialPct <= 100)
-    ? initialPct
-    : 50;
+  const safeInitial = (
+    typeof initialPct === 'number' &&
+    !isNaN(initialPct) &&
+    initialPct >= 0 &&
+    initialPct <= 100
+  ) ? initialPct : 50;
 
+  // ── Shared values ──
   const level = useSharedValue(safeInitial / 100);
   const startLevel = useSharedValue(safeInitial / 100);
+  // 0 = white border, 1 = level color border
+  const borderAnim = useSharedValue(0);
+  // 0 = white terminal, 1 = level color terminal
+  const terminalAnim = useSharedValue(0);
+
   const [displayPct, setDisplayPct] = useState(Math.round(safeInitial));
+  const [terminalColor, setTerminalColor] = useState('rgba(255,255,255,0.9)');
+
+  const isConfirming = useRef(false);
+
+  // ── Hint animations ──
+  const hintOpacity = useSharedValue(0);
+  const hintSlideY = useSharedValue(20);
+  const hintBounce = useSharedValue(0);
+  const hasInteracted = useRef(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bounceInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Slide-in hint on mount
+  useEffect(() => {
+    hintOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
+    hintSlideY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
+  }, []);
+
+  // Cleanup on unmount — cancel any in-flight animations
+  useEffect(() => {
+    return () => {
+      cancelAnimation(level);
+      cancelAnimation(borderAnim);
+      cancelAnimation(terminalAnim);
+      cancelAnimation(hintBounce);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (bounceInterval.current) clearInterval(bounceInterval.current);
+    };
+  }, []);
+
+  const triggerBounce = useCallback(() => {
+    hintBounce.value = withSequence(
+      withTiming(-10, { duration: 140, easing: Easing.out(Easing.ease) }),
+      withTiming(2, { duration: 110, easing: Easing.in(Easing.ease) }),
+      withTiming(-6, { duration: 100, easing: Easing.out(Easing.ease) }),
+      withTiming(0, { duration: 100, easing: Easing.in(Easing.ease) }),
+    );
+  }, []);
+
+  useEffect(() => {
+    idleTimer.current = setTimeout(() => {
+      if (hasInteracted.current) return;
+      triggerBounce();
+      bounceInterval.current = setInterval(() => {
+        if (hasInteracted.current) { clearInterval(bounceInterval.current!); return; }
+        triggerBounce();
+      }, 4000);
+    }, 5000);
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (bounceInterval.current) clearInterval(bounceInterval.current);
+    };
+  }, []);
+
+  const stopIdleAnimations = useCallback(() => {
+    hasInteracted.current = true;
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    if (bounceInterval.current) clearInterval(bounceInterval.current);
+  }, []);
 
   const syncDisplay = useCallback((v: number) => {
-    const safe = (typeof v === 'number' && !isNaN(v)) ? Math.round(Math.max(0, Math.min(1, v)) * 100) : 50;
+    const safe = typeof v === 'number' && !isNaN(v)
+      ? Math.round(Math.max(0, Math.min(1, v)) * 100)
+      : 50;
     setDisplayPct(safe);
   }, []);
 
+  const doConfirm = useCallback((pct: number) => {
+    onConfirm(pct);
+  }, [onConfirm]);
+
+  const applyTerminalColor = useCallback((color: string) => {
+    setTerminalColor(color);
+  }, []);
+
+  // ── Pan gesture ──
   const pan = Gesture.Pan()
     .minDistance(1)
     .onStart(() => {
+      if (isConfirming.current) return;
       startLevel.value = level.value;
+      runOnJS(stopIdleAnimations)();
     })
     .onUpdate((e) => {
+      if (isConfirming.current) return;
       const translation = e.translationY;
       if (typeof translation !== 'number' || isNaN(translation)) return;
-
-      // Smoother: 1.2x sensitivity multiplier
       const delta = (-translation / BATTERY_BODY_H) * 1.2;
       const next = Math.max(0, Math.min(1, startLevel.value + delta));
-
       if (!isNaN(next)) {
         level.value = next;
         runOnJS(syncDisplay)(next);
       }
+    })
+    .onEnd(() => {
+      if (isConfirming.current) return;
+      isConfirming.current = true;
+
+      const finalLevel = level.value;
+      const finalPct = Math.round(finalLevel * 100);
+
+      // Pass level color to terminal overlay
+      const levelColor = interpolateColor(
+        finalLevel,
+        BATTERY_COLORS.inputRange,
+        BATTERY_COLORS.outputRange,
+      );
+      runOnJS(applyTerminalColor)(levelColor);
+
+      borderAnim.value = withSequence(
+        // 1. bottom start (quick)
+        withTiming(0.3, { duration: 180, easing: Easing.out(Easing.ease) }),
+
+        // 2. side travel (main motion)
+        withTiming(0.75, { duration: 260, easing: Easing.inOut(Easing.cubic) }),
+
+        // 3. top closure (snap finish)
+        withTiming(1, { duration: 160, easing: Easing.out(Easing.ease) }),
+      );
+
+      // 🔥 trigger terminal flash when "top reached"
+      terminalAnim.value = withDelay(
+        450,
+        withSequence(
+          withTiming(1, { duration: 120 }),
+          withTiming(0.6, { duration: 80 }),
+          withTiming(1, { duration: 120 }),
+        )
+      );
+
+      // ✅ confirm AFTER animation completes
+      setTimeout(() => {
+        runOnJS(doConfirm)(finalPct);
+      }, 650);
+
     });
 
+  // ── Animated styles ──
   const fillHeightStyle = useAnimatedStyle(() => {
     const h = BATTERY_FILL_MAX_H * level.value;
     return { height: isNaN(h) ? 0 : h };
@@ -510,35 +637,105 @@ function BatterySlider({
     ),
   }));
 
+  // Border color transitions white → level color on confirm
+  const bodyStyle = useAnimatedStyle(() => {
+    const levelColor = interpolateColor(
+      level.value,
+      BATTERY_COLORS.inputRange,
+      BATTERY_COLORS.outputRange,
+    );
+    return {
+      borderColor: interpolateColor(
+        borderAnim.value,
+        [0, 0.3, 0.75, 1],
+        [
+          'rgba(255,255,255,0.85)',
+          '#cfc3ff',
+          '#b69df8',
+          levelColor,
+        ],
+      ),
+    };
+  });
+
+  const terminalAnimStyle = useAnimatedStyle(() => ({
+    opacity: terminalAnim.value,
+  }));
+
+  const hintStyle = useAnimatedStyle(() => ({
+    opacity: hintOpacity.value,
+    transform: [{ translateY: hintSlideY.value + hintBounce.value }],
+  }));
+
   return (
     <View style={styles.batteryOuter}>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={styles.batteryGestureArea}>
-          {/* Terminal nub */}
-          <View style={styles.batteryTerminal} />
+      <View style={styles.batterySection}>
+        <GestureDetector gesture={pan}>
+          <Animated.View style={styles.batteryGestureArea}>
 
-          {/* Battery body */}
-          <View style={styles.batteryBody}>
-            {/* Transparent interior */}
-            <View style={styles.batteryInterior}>
-              {/* Colored fill */}
-              <Animated.View style={[styles.batteryFill, fillHeightStyle, fillColorStyle]} />
+            {/* Terminal nub */}
+            <View style={styles.batteryTerminal}>
+              <Animated.View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: terminalColor },
+                  terminalAnimStyle,
+                ]}
+              />
             </View>
 
-            {/* Percentage centered inside battery */}
-            <View style={styles.batteryPctContainer}>
-              <Text style={styles.batteryPct}>{displayPct}%</Text>
-            </View>
-          </View>
-        </Animated.View>
-      </GestureDetector>
+            {/* Battery body — border color animated directly */}
+            <Animated.View style={[styles.batteryBody, bodyStyle]}>
+              {/* Interior fill */}
+              <View style={styles.batteryInterior}>
+                <Animated.View style={[styles.batteryFill, fillHeightStyle, fillColorStyle]} />
+              </View>
 
-      <TouchableOpacity
-        style={styles.batteryConfirmBtn}
-        onPress={() => onConfirm(displayPct)}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.batteryConfirmText}>This feels right</Text>
+              {/* Percentage label */}
+              <View style={styles.batteryPctContainer}>
+                <Text style={styles.batteryPct}>{displayPct}%</Text>
+              </View>
+            </Animated.View>
+
+          </Animated.View>
+        </GestureDetector>
+
+        <Animated.Text style={[styles.batteryHint, hintStyle]}>Slide up or down</Animated.Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Did You Know ─────────────────────────────────────────────────────────────
+
+function DidYouKnow({ onContinue }: { onContinue: () => void }) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(24);
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
+    translateY.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
+  }, []);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <View style={styles.dykOuter}>
+      <Animated.View style={[styles.dykCard, containerStyle]}>
+        <Text style={styles.dykEmoji}>🧠</Text>
+        <Text style={styles.dykLabel}>DID YOU KNOW</Text>
+        <Text style={styles.dykFact}>
+          Naming what you feel literally changes your brain. Labeling an emotion activates your
+          prefrontal cortex and calms your amygdala — the part that drives fear and stress.
+        </Text>
+        <Text style={styles.dykSub}>That's what you just did. Good.</Text>
+      </Animated.View>
+
+      <TouchableOpacity style={styles.dykBtn} onPress={onContinue} activeOpacity={0.8}>
+        <Text style={styles.dykBtnText}>Keep going</Text>
       </TouchableOpacity>
     </View>
   );
@@ -562,7 +759,6 @@ function WriteYourOwnSheet({ visible, prompt, initialValue, onClose, onSubmit }:
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
-  // Tracks how far the sheet lifts when keyboard appears
   const sheetBottom = useSharedValue(16);
 
   const hideModal = useCallback(() => {
@@ -571,7 +767,6 @@ function WriteYourOwnSheet({ visible, prompt, initialValue, onClose, onSubmit }:
     onClose();
   }, [onClose]);
 
-  // Keyboard listeners — move sheet up instead of using KAV
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (e) => {
       sheetBottom.value = withTiming(e.endCoordinates.height + 16, { duration: 250 });
@@ -621,14 +816,11 @@ function WriteYourOwnSheet({ visible, prompt, initialValue, onClose, onSubmit }:
 
   return (
     <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      {/* Plain View — no KAV, avoids Android white surface bug */}
       <View style={styles.wsContainer}>
-        {/* Backdrop */}
         <Animated.View style={[styles.wsBackdrop, backdropStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
 
-        {/* Sheet — floating card: left 12, right 12, borderRadius 40 */}
         <Animated.View style={[styles.wsSheet, sheetStyle]}>
           <View style={styles.wsHandle} />
 
@@ -685,7 +877,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  // ── Header (inside each page) ──
+  // ── Header ──
   header: {
     paddingBottom: 8,
   },
@@ -880,9 +1072,13 @@ const styles = StyleSheet.create({
   // ── Battery Slider ──
   batteryOuter: {
     flex: 1,
+    alignSelf: 'stretch',
+  },
+  batterySection: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 18,
+    gap: 14,
   },
   batteryGestureArea: {
     alignItems: 'center',
@@ -897,12 +1093,14 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
     marginBottom: 5,
     zIndex: 1,
+    overflow: 'hidden', // ✅ KEY FIX
   },
   batteryBody: {
     width: BATTERY_BODY_W,
     height: BATTERY_BODY_H,
     borderRadius: BATTERY_BODY_RADIUS,
     borderWidth: BATTERY_BORDER_W,
+    // base color — overridden by animated bodyStyle
     borderColor: 'rgba(255,255,255,0.85)',
     backgroundColor: 'transparent',
   },
@@ -941,17 +1139,62 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
-  batteryConfirmBtn: {
-    backgroundColor: '#8B7EF8',
-    borderRadius: 30,
-    paddingVertical: 16,
-    paddingHorizontal: 56,
-    alignItems: 'center',
-    marginTop: 16,
+
+  // ── Did You Know ──
+  dykOuter: {
+    flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
   },
-  batteryConfirmText: {
+  dykCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  dykEmoji: {
+    fontSize: 56,
+    marginBottom: 4,
+  },
+  dykLabel: {
+    fontSize: 11,
     fontFamily: 'Outfit-SemiBold',
-    fontSize: 16,
+    color: '#8B7EF8',
+    letterSpacing: 2.5,
+  },
+  dykFact: {
+    fontSize: 20,
+    fontFamily: 'Outfit-Medium',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    lineHeight: 30,
+  },
+  dykSub: {
+    fontSize: 14,
+    fontFamily: 'Outfit-Regular',
+    color: '#9999A8',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  dykBtn: {
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    marginHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  dykBtnText: {
+    fontFamily: 'Outfit-SemiBold',
+    fontSize: 18,
     color: '#FFFFFF',
   },
 });
+
