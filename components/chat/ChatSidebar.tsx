@@ -37,7 +37,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { getSessions, formatSessionTime, type ChatSession } from '@/services/chat/sessionHistory';
+import { router } from 'expo-router';
+import { getChats, formatRelativeTime, type ChatListItem } from '@/services/chat/chatService';
+import { supabase } from '@/lib/supabase';
 
 interface ChatSidebarProps {
   visible: boolean;
@@ -46,7 +48,7 @@ interface ChatSidebarProps {
   userEmail: string;
   onClose: () => void;
   onNewChat: () => void;
-  onSelectSession: (session: ChatSession) => void;
+  onSelectSession: (session: ChatListItem) => void;
 }
 
 const DRAWER_WIDTH_RATIO = 0.82;
@@ -69,13 +71,24 @@ export default memo(function ChatSidebar({
   const translateX = useSharedValue(-drawerWidth);
   const backdropOpacity = useSharedValue(0);
 
-  const [sessions, setSessions] = React.useState<ChatSession[]>([]);
+  const [chats, setChats] = React.useState<ChatListItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
   const hasOpenedRef = useRef(false);
 
-  // Load sessions each time sidebar opens
+  // Load chats from Supabase each time sidebar opens
   useEffect(() => {
     if (visible) {
-      getSessions().then(setSessions);
+      setIsLoading(true);
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          getChats(user.id).then((loadedChats) => {
+            setChats(loadedChats);
+            setIsLoading(false);
+          });
+        } else {
+          setIsLoading(false);
+        }
+      });
     }
   }, [visible]);
 
@@ -171,7 +184,10 @@ export default memo(function ChatSidebar({
           </Pressable>
 
           {/* Chats nav */}
-          <Pressable style={styles.navRow} onPress={onClose}>
+          <Pressable
+            style={styles.navRow}
+            onPress={() => { onClose(); router.navigate('/(main)/chats' as any); }}
+          >
             <Ionicons name="chatbubbles-outline" size={20} color="rgba(0,0,0,0.6)" style={styles.navIcon} />
             <Text style={styles.navLabel}>Chats</Text>
           </Pressable>
@@ -179,7 +195,7 @@ export default memo(function ChatSidebar({
           <View style={styles.divider} />
 
           {/* Recents — expands to fill remaining space */}
-          {sessions.length > 0 ? (
+          {chats.length > 0 ? (
             <View style={styles.recentsSection}>
               <Text style={styles.sectionHeader}>Recents</Text>
               <ScrollView
@@ -187,22 +203,26 @@ export default memo(function ChatSidebar({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.sessionListContent}
               >
-                {sessions.map((s) => (
+                {chats.map((chat) => (
                   <Pressable
-                    key={s.id}
+                    key={chat.id}
                     style={[
                       styles.sessionRow,
-                      s.id === currentSessionId && styles.sessionRowActive,
+                      chat.id === currentSessionId && styles.sessionRowActive,
                     ]}
-                    onPress={() => { onClose(); onSelectSession(s); }}
+                    onPress={() => { onClose(); onSelectSession(chat); }}
                   >
                     <Text style={styles.sessionTitle} numberOfLines={1}>
-                      {s.id === currentSessionId ? currentTitle : s.title}
+                      {chat.id === currentSessionId ? currentTitle : chat.title}
                     </Text>
-                    <Text style={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</Text>
+                    <Text style={styles.sessionTime}>{formatRelativeTime(chat.updated_at)}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
+            </View>
+          ) : isLoading ? (
+            <View style={styles.recentsSection}>
+              <Text style={styles.sectionHeader}>Loading...</Text>
             </View>
           ) : (
             <View style={styles.recentsSection} />

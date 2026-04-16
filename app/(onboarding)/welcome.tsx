@@ -18,22 +18,22 @@ import {
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DreamyGradient } from '@/components/common';
 import AuthBottomSheet from '@/components/onboarding/AuthBottomSheet';
 
 export default function WelcomeScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [showAuthSheet, setShowAuthSheet] = useState(false);
-
-  const handleTakeTour = () => {
-    router.push('/(onboarding)/tour');
-  };
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
 
   const handleGetStarted = () => {
-    // Show auth bottom sheet
+    setAuthMode('signup');
+    setShowAuthSheet(true);
+  };
+
+  const handleAlreadyHaveAccount = () => {
+    setAuthMode('signin');
     setShowAuthSheet(true);
   };
 
@@ -56,15 +56,6 @@ export default function WelcomeScreen() {
 
         {/* Bottom Buttons */}
         <View style={[styles.buttonSection, { paddingBottom: insets.bottom + 24 }]}>
-          {/* Take a quick tour - White button */}
-          <TouchableOpacity
-            style={styles.tourButton}
-            onPress={handleTakeTour}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.tourButtonText}>Take a quick tour</Text>
-          </TouchableOpacity>
-
           {/* Get Started - Black button */}
           <TouchableOpacity
             style={styles.getStartedButton}
@@ -73,6 +64,15 @@ export default function WelcomeScreen() {
           >
             <Text style={styles.getStartedButtonText}>Get Started</Text>
           </TouchableOpacity>
+
+          {/* I already have an account - Ghost button */}
+          <TouchableOpacity
+            style={styles.signInButton}
+            onPress={handleAlreadyHaveAccount}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.signInButtonText}>I already have an account</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -80,6 +80,7 @@ export default function WelcomeScreen() {
       <AuthBottomSheet
         visible={showAuthSheet}
         onClose={() => setShowAuthSheet(false)}
+        initialMode={authMode}
       />
     </View>
   );
@@ -151,5 +152,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Outfit-SemiBold',
     color: '#FFFFFF',
+  },
+  signInButton: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  signInButtonText: {
+    fontSize: 16,
+    fontFamily: 'Outfit-Medium',
+    color: 'rgba(255, 255, 255, 0.85)',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(255, 255, 255, 0.5)',
   },
 });

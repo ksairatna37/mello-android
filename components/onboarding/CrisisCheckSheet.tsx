@@ -55,6 +55,8 @@ interface CrisisCheckSheetProps {
   visible: boolean;
   onClose: () => void;
   onContinue: () => void;
+  isOnboardingCompleted?: boolean;
+  onTalkToMello?: () => void;
 }
 
 // Animated Checkbox Option
@@ -105,6 +107,8 @@ export default function CrisisCheckSheet({
   visible,
   onClose,
   onContinue,
+  isOnboardingCompleted = false,
+  onTalkToMello,
 }: CrisisCheckSheetProps) {
   const insets = useSafeAreaInsets();
   const [isVisible, setIsVisible] = useState(false);
@@ -239,24 +243,38 @@ export default function CrisisCheckSheet({
                     </TouchableOpacity>
                   )}
 
-                  {/* Continue/Skip Button */}
-                  <TouchableOpacity
-                    style={[
-                      styles.skipButton,
-                      needsSupport && styles.skipButtonSecondary,
-                    ]}
-                    onPress={handleContinue}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.skipButtonText,
-                        needsSupport && styles.skipButtonTextSecondary,
-                      ]}
+                  {/* Talk to Mello Button - Only if onboarding completed */}
+                  {isOnboardingCompleted && (
+                    <TouchableOpacity
+                      style={styles.talkToMelloButton}
+                      onPress={onTalkToMello}
+                      activeOpacity={0.8}
                     >
-                      {selectedOption === 'safe' ? "I'll continue" : 'Not right now'}
-                    </Text>
-                  </TouchableOpacity>
+                      <Text style={styles.talkToMelloText}>Talk to Mello</Text>
+                      <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Continue/Skip Button - Hidden when safe */}
+                  {selectedOption !== 'safe' && (
+                    <TouchableOpacity
+                      style={[
+                        styles.skipButton,
+                        needsSupport && styles.skipButtonSecondary,
+                      ]}
+                      onPress={handleContinue}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.skipButtonText,
+                          needsSupport && styles.skipButtonTextSecondary,
+                        ]}
+                      >
+                        Not right now
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
             ) : (
@@ -415,6 +433,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   supportButtonText: {
+    fontSize: 17,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
+  },
+  talkToMelloButton: {
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  talkToMelloText: {
     fontSize: 17,
     fontFamily: 'Outfit-SemiBold',
     color: '#FFFFFF',

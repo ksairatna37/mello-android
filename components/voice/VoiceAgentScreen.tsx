@@ -33,6 +33,17 @@ import { LIGHT_THEME } from '@/components/common/LightGradient';
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { fullscreenStore } from '@/utils/fullscreenStore';
 import { sidebarStore } from '@/utils/sidebarStore';
+import { getSession } from '@/services/auth';
+import { generateChatTitle } from '@/services/chat/bedrockService';
+import {
+  getVoiceSessionContext,
+  startVoiceSession,
+  updateHumeIds,
+  updateVoiceTranscript,
+  finalizeVoiceSession,
+  type VoiceTranscriptEntry,
+} from '@/services/chat/voiceChatService';
+import { supabase } from '@/lib/supabase';
 import TranscriptIcon from './TranscriptIcon';
 import HindiVoiceScreen from './HindiVoiceScreen';
 import InterventionIndicator from './InterventionIndicator';
@@ -235,6 +246,20 @@ export default function VoiceAgentScreen() {
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animatedIdsRef = useRef<Set<string>>(new Set());
 
+  // ── Voice session tracking (Supabase persistence) ──
+  const voiceSessionIdRef = useRef<string | null>(null);
+  const voiceStartTimeRef = useRef<number>(0);
+  const voiceTranscriptRef = useRef<VoiceTranscriptEntry[]>([]);
+  const humeChatGroupIdRef = useRef<string>('');
+  const sessionEndedRef = useRef(false); // guard against double-finalize
+  // user_context for this call — preserved in refs so mid-call sendSessionSettings
+  // (interventions) can re-include it (matching WhatsApp agent behaviour)
+  const userContextRef = useRef<string>('');
+
+  // Real-time title (generated after first user turn, same pattern as text chat)
+  const [voiceChatTitle, setVoiceChatTitle] = useState<string | null>(null);
+  const titleGeneratedRef = useRef(false); // prevent duplicate generation per session
+
   // Intervention system state (inline per plan)
   const [currentIntervention, setCurrentIntervention] = useState<InterventionDecision | null>(null);
   const currentInterventionRef = useRef<InterventionDecision | null>(null); // For use in callbacks
@@ -253,6 +278,19 @@ export default function VoiceAgentScreen() {
   useFocusEffect(useCallback(() => {
     return () => { sidebarStore.close(); };
   }, []));
+
+  // Load user email for sidebar display
+  useEffect(() => {
+    getSession().then((session) => {
+      if (session?.email) {
+        sidebarStore.setContext({
+          currentSessionId: '',
+          currentTitle: 'Voice Chat',
+          userEmail: session.email,
+        });
+      }
+    });
+  }, []);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -307,6 +345,31 @@ export default function VoiceAgentScreen() {
       const newId = `msg-${++msgIdCounter}`;
       setMessages((prev) => [...prev, { id: newId, role: 'user', text }]);
 
+      // Append to transcript ref and persist
+      if (voiceSessionIdRef.current) {
+        const entry: VoiceTranscriptEntry = {
+          role: 'user',
+          text,
+          timestamp: Date.now(),
+          emotions: emotions.top3,
+        };
+        voiceTranscriptRef.current = [...voiceTranscriptRef.current, entry];
+        updateVoiceTranscript(voiceSessionIdRef.current, voiceTranscriptRef.current);
+      }
+
+      // Generate title after first user turn (Hume speaks first, so transcript
+      // already has at least one assistant entry — same pattern as text chat)
+      if (!titleGeneratedRef.current) {
+        titleGeneratedRef.current = true;
+        const msgs = voiceTranscriptRef.current.map((t) => ({
+          role: t.role as 'user' | 'assistant',
+          content: [{ text: t.text }] as [{ text: string }],
+        }));
+        generateChatTitle(msgs).then((title) => {
+          if (title) setVoiceChatTitle(title);
+        });
+      }
+
       // Run intervention detection
       const humeMessage = {
         type: 'user_message',
@@ -360,6 +423,13 @@ export default function VoiceAgentScreen() {
       // Add assistant message to chat
       const newId = `msg-${++msgIdCounter}`;
       setMessages((prev) => [...prev, { id: newId, role: 'assistant', text }]);
+
+      // Append to transcript ref and persist
+      if (voiceSessionIdRef.current) {
+        const entry: VoiceTranscriptEntry = { role: 'assistant', text, timestamp: Date.now() };
+        voiceTranscriptRef.current = [...voiceTranscriptRef.current, entry];
+        updateVoiceTranscript(voiceSessionIdRef.current, voiceTranscriptRef.current);
+      }
     },
 
     onAudioOutput: async (base64Audio: string) => {
@@ -383,9 +453,14 @@ export default function VoiceAgentScreen() {
       console.log('[Hume] assistant_end');
     },
 
-    onConnected: (chatId: string) => {
-      console.log('[Hume] connected, chatId:', chatId);
+    onConnected: (chatId: string, chatGroupId: string) => {
+      console.log('[Hume] connected, chatId:', chatId, 'chatGroupId:', chatGroupId.substring(0, 20));
       setCallState('active');
+      // Store Hume IDs in DB
+      humeChatGroupIdRef.current = chatGroupId;
+      if (voiceSessionIdRef.current) {
+        updateHumeIds(voiceSessionIdRef.current, chatId, chatGroupId);
+      }
     },
 
     onDisconnected: () => {
@@ -407,10 +482,11 @@ export default function VoiceAgentScreen() {
     if (callState !== 'active' || !humeServiceRef.current) return;
 
     if (currentIntervention && lastSentTypeRef.current !== currentIntervention.type) {
-      // Send guidance to Hume
+      // Send guidance to Hume — always include user_context to preserve it
       console.log('[Intervention] Sending guidance to Hume:', currentIntervention.type);
       humeServiceRef.current.sendSessionSettings({
         intervention_guidance: currentIntervention.guidance,
+        user_context: userContextRef.current,
       });
       lastSentTypeRef.current = currentIntervention.type;
 
@@ -418,14 +494,20 @@ export default function VoiceAgentScreen() {
       if (ttlTimeoutRef.current) clearTimeout(ttlTimeoutRef.current);
       ttlTimeoutRef.current = setTimeout(() => {
         console.log('[Intervention] TTL expired, clearing guidance');
-        humeServiceRef.current?.sendSessionSettings({ intervention_guidance: '' });
+        humeServiceRef.current?.sendSessionSettings({
+          intervention_guidance: '',
+          user_context: userContextRef.current,
+        });
         currentInterventionRef.current = null;
         setCurrentIntervention(null);
         lastSentTypeRef.current = null;
       }, currentIntervention.ttlMs);
     } else if (!currentIntervention && lastSentTypeRef.current) {
       // Clear guidance
-      humeServiceRef.current.sendSessionSettings({ intervention_guidance: '' });
+      humeServiceRef.current.sendSessionSettings({
+        intervention_guidance: '',
+        user_context: userContextRef.current,
+      });
       lastSentTypeRef.current = null;
     }
   }, [currentIntervention, callState]);
@@ -502,6 +584,15 @@ export default function VoiceAgentScreen() {
     msgIdCounter = 0;
     animatedIdsRef.current.clear();
 
+    // Reset session tracking refs
+    voiceSessionIdRef.current = null;
+    voiceTranscriptRef.current = [];
+    humeChatGroupIdRef.current = '';
+    sessionEndedRef.current = false;
+    voiceStartTimeRef.current = Date.now();
+    titleGeneratedRef.current = false;
+    setVoiceChatTitle(null);
+
     // ── DEV MODE: skip Hume, play fake conversation ──
     if (DEV_MODE) {
       setTimeout(() => startDevConversation(), 800);
@@ -516,6 +607,23 @@ export default function VoiceAgentScreen() {
 
     try {
       console.log('[Mello] NativeAudio available:', !!NativeAudio);
+
+      // Fetch resume context + start DB session in parallel
+      const { data: { user } } = await supabase.auth.getUser();
+      let resumedChatGroupId: string | null = null;
+      let userContextText = '';
+
+      if (user) {
+        const [context, sessionId] = await Promise.all([
+          getVoiceSessionContext(user.id),
+          startVoiceSession(user.id),
+        ]);
+        voiceSessionIdRef.current = sessionId;
+        resumedChatGroupId = context.hume_chat_group_id;
+        userContextText = context.user_context_text;
+        userContextRef.current = userContextText;
+        console.log('[Mello] Voice session created:', sessionId, 'resume group:', resumedChatGroupId?.substring(0, 20));
+      }
 
       // Request microphone permission using expo-av
       console.log('[Mello] Requesting audio permissions...');
@@ -545,13 +653,18 @@ export default function VoiceAgentScreen() {
         HUME_API_KEY,
         HUME_DEFAULT_CONFIG_ID,
         humeCallbacks,
+        undefined,          // sampleRate — use platform default
+        resumedChatGroupId, // pass group ID to resume conversation memory
+        // All EVI config variables must be in the very first session_settings,
+        // otherwise Hume fires "no values specified" before a second message arrives
+        {
+          user_context: userContextText,
+          intervention_guidance: '',
+        },
       );
       humeServiceRef.current = service;
       await service.connect();
       console.log('[Mello] Hume WebSocket connected!');
-
-      // Initialize intervention_guidance variable (required by Hume config)
-      service.sendSessionSettings({ intervention_guidance: '' });
 
       if (NativeAudio) {
         let audioChunkCount = 0;
@@ -599,6 +712,25 @@ export default function VoiceAgentScreen() {
 
   const handleEndCall = useCallback(async () => {
     console.log('[Mello] === Ending call ===');
+
+    // Finalize voice session (non-blocking — fire and forget)
+    if (
+      voiceSessionIdRef.current &&
+      voiceTranscriptRef.current.length > 0 &&
+      !sessionEndedRef.current
+    ) {
+      sessionEndedRef.current = true;
+      const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      if (user) {
+        finalizeVoiceSession(
+          voiceSessionIdRef.current,
+          user.id,
+          humeChatGroupIdRef.current,
+          voiceStartTimeRef.current,
+          voiceTranscriptRef.current,
+        );
+      }
+    }
 
     try {
       // Clear dev timers
@@ -659,24 +791,22 @@ export default function VoiceAgentScreen() {
     } catch (err) {
       console.error('[Mello] Error in handleEndCall:', err);
     } finally {
-      // Always update state even if cleanup fails
-      setCallState('ended');
+      // Return straight to idle — no "ended" limbo screen
+      setCallState('idle');
+      setMessages([]);
+      setShowCrisisWarning(false);
+      setShowTranscript(false);
       setIsAssistantSpeaking(false);
       setIsUserSpeaking(false);
       setIsWaitingForResponse(false);
       setIsFullscreen(false);
+      setVoiceChatTitle(null);
       assistantSpeakingRef.current = false;
       setCurrentIntervention(null);
+      titleGeneratedRef.current = false;
     }
   }, []);
 
-  const handleNewCall = useCallback(() => {
-    setCallState('idle');
-    setMessages([]);
-    setShowCrisisWarning(false);
-    setShowTranscript(false);
-    setIsFullscreen(false);
-  }, []);
 
   const handleHindiBack = useCallback(() => {
     setShowHindiScreen(false);
@@ -714,6 +844,26 @@ export default function VoiceAgentScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // Finalize any active session on unmount (app backgrounded / tab changed)
+      if (
+        voiceSessionIdRef.current &&
+        voiceTranscriptRef.current.length > 0 &&
+        !sessionEndedRef.current
+      ) {
+        sessionEndedRef.current = true;
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            finalizeVoiceSession(
+              voiceSessionIdRef.current!,
+              user.id,
+              humeChatGroupIdRef.current,
+              voiceStartTimeRef.current,
+              voiceTranscriptRef.current,
+            );
+          }
+        }).catch(() => { /* ignore */ });
+      }
+
       try {
         fullscreenStore.set(false);
         devTimersRef.current.forEach(clearTimeout);
@@ -836,6 +986,7 @@ export default function VoiceAgentScreen() {
         </Pressable>
         <View style={styles.voiceHeaderCenter}>
           <Text style={styles.voiceLogoText}>mello</Text>
+          <Text style={styles.voiceHeaderSubtitle}>Voice Chat</Text>
         </View>
         <Pressable style={styles.voiceHeaderBtn} hitSlop={8} onPress={() => setShowInfoSheet(true)}>
           <Ionicons name="information-circle-outline" size={22} color="#1A1A1A" />
@@ -943,12 +1094,6 @@ export default function VoiceAgentScreen() {
           </View>
         )}
 
-        {callState === 'ended' && (
-          <Pressable style={styles.startPill} onPress={handleNewCall}>
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.startPillText}>New session</Text>
-          </Pressable>
-        )}
       </View>
 
       <VoiceInfoSheet visible={showInfoSheet} onClose={() => setShowInfoSheet(false)} />
@@ -984,6 +1129,20 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     lineHeight: 32,
     marginBottom: 10,
+  },
+  voiceHeaderSubtitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 1,
+  },
+  voiceHeaderTitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 13,
+    color: 'rgba(0,0,0,0.5)',
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 6,
   },
 
   // Timer

@@ -46,15 +46,16 @@ const SHEET_HEIGHT = 520;
 interface AuthBottomSheetProps {
   visible: boolean;
   onClose: () => void;
+  initialMode?: 'signin' | 'signup';
 }
 
-export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetProps) {
+export default function AuthBottomSheet({ visible, onClose, initialMode = 'signin' }: AuthBottomSheetProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, loading: authLoading } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
 
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -108,6 +109,7 @@ export default function AuthBottomSheet({ visible, onClose }: AuthBottomSheetPro
 
   useEffect(() => {
     if (visible) {
+      setIsSignUp(initialMode === 'signup');
       setIsVisible(true);
       backdropOpacity.value = withTiming(1, { duration: 350 });
       translateY.value = withSpring(0, {

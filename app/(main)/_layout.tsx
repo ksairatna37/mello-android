@@ -26,7 +26,7 @@ import { fullscreenStore } from '@/utils/fullscreenStore';
 import { sidebarStore } from '@/utils/sidebarStore';
 import { chatNavStore } from '@/utils/chatNavStore';
 import ChatSidebar from '@/components/chat/ChatSidebar';
-import type { ChatSession } from '@/services/chat/sessionHistory';
+import type { ChatListItem } from '@/services/chat/chatService';
 
 const CONTENT_RADIUS = 28;
 const FULL_SCREEN_ROUTES = new Set(['/breathing']);
@@ -52,7 +52,7 @@ export default function MainLayout() {
     router.navigate('/chat');
   }, []);
 
-  const handleSidebarSelectSession = useCallback((session: ChatSession) => {
+  const handleSidebarSelectSession = useCallback((session: ChatListItem) => {
     sidebarStore.close();
     chatNavStore.push({ type: 'select-session', session });
     router.navigate('/chat');
@@ -123,6 +123,7 @@ export default function MainLayout() {
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
 
           {/* Hidden — navigable via router but not in tab bar */}
+          <Tabs.Screen name="chats" options={{ href: null }} />
           <Tabs.Screen name="mood" options={{ href: null }} />
           <Tabs.Screen name="profile" options={{ href: null }} />
           <Tabs.Screen name="mood-history" options={{ href: null }} />

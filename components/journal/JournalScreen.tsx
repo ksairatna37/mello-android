@@ -8,7 +8,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, StatusBar } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
 import JournalEntryCard from './JournalEntryCard';
 import JournalEditorScreen from './JournalEditorScreen';
@@ -23,6 +23,17 @@ export default function JournalScreen() {
   const router = useRouter();
   const [mode, setMode] = useState<ScreenMode>('list');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+
+  const paddingTop = insets.top + 12;
+  const subtitleH = useSharedValue(16);
+  const subtitleOpacity = useSharedValue(1);
+  const headerSubtitleText = 'Journal';
+
+  const subtitleAnimStyle = useAnimatedStyle(() => ({
+    height: subtitleH.value,
+    opacity: subtitleOpacity.value,
+    overflow: 'hidden',
+  }));
 
   const loadEntries = useCallback(async () => {
     const data = await getJournalEntries();
@@ -57,12 +68,21 @@ export default function JournalScreen() {
       <LightGradient variant="warm" />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color={LIGHT_THEME.textSecondary} />
+      <View style={[styles.header, { paddingTop }]}>
+        <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
         </Pressable>
-        <Text style={styles.headerTitle}>Journal</Text>
-        <View style={{ width: 36 }} />
+
+        <View style={styles.headerCenter}>
+          <Text style={styles.logoText}>mello</Text>
+          <Animated.View style={subtitleAnimStyle}>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {headerSubtitleText}
+            </Text>
+          </Animated.View>
+        </View>
+
+        <View style={styles.headerSpacer} />
       </View>
 
       {entries.length === 0 ? (
@@ -116,25 +136,43 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  backButton: {
-    width: 36,
-    height: 36,
+
+  headerBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: LIGHT_THEME.surface,
-    borderRadius: 18,
-    ...CARD_SHADOW,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Outfit-SemiBold',
-    color: LIGHT_THEME.textPrimary,
+
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
+
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  logoText: {
+    fontFamily: 'Playwrite',
+    fontSize: 26,
+    color: '#1A1A1A',
+    lineHeight: 32,
+    marginBottom: 10,
+  },
+
+  headerSubtitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 1,
   },
 
   // Empty state

@@ -18,7 +18,7 @@ import React, {
   memo,
   useSyncExternalStore,
 } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import Animated, {
   withTiming,
   Easing,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -51,11 +52,32 @@ import LoadingDots from './LoadingDots';
 import { MicButton, RecordingBar, OnboardingModal, useVoiceMic } from './VoiceMicButton';
 import FadingScrollWrapper from '@/components/get-rolling/ScrollFadeEdges';
 
-import { sendToBedrock, generateChatTitle as aiGenerateChatTitle } from '@/services/chat/bedrockService';
-import { loadChat, saveChat, toStoredMessages, fromStoredMessages } from '@/services/chat/chatApi';
-import { upsertSession, deleteSession, type ChatSession } from '@/services/chat/sessionHistory';
-import { getAccessToken, getSession } from '@/services/auth';
-import type { BedrockMessage } from '@/services/chat/bedrockService';
+import { sendToBedrock } from '@/services/chat/bedrockService';
+import {
+  createChat,
+  getChats,
+  getChat,
+  addMessage,
+  updateTitle,
+  generateAndSetTitle,
+  endChat,
+  deleteChat,
+  starChat,
+  updateChatFeedback,
+  toBedrockFormat,
+  formatRelativeTime,
+  type Chat,
+  type ChatMessage,
+  type ChatListItem,
+  type ChatFeedback,
+} from '@/services/chat/chatService';
+import RenameChatSheet from './RenameChatSheet';
+import DeleteChatSheet from './DeleteChatSheet';
+import { getSession } from '@/services/auth';
+import { supabase } from '@/lib/supabase';
+
+// Re-export for sidebar
+export { type ChatListItem, getChats, formatRelativeTime };
 
 // ═══════════════════════════════════════════════════
 // TYPES
@@ -87,15 +109,13 @@ function getTimeGreeting(): string {
   return 'tonight?';
 }
 
-function toBedrockMessages(messages: Message[]): BedrockMessage[] {
-  return messages.map((m) => ({
-    role: m.isUser ? 'user' : 'assistant',
-    content: [{ text: m.text }],
-  }));
-}
 
 function isNewMessage(id: string): boolean {
   return !id.startsWith('stored_') && id !== 'welcome';
+}
+
+function normalizeAIText(text: string): string {
+  return text.replace(/^\s+/, '');
 }
 
 // ═══════════════════════════════════════════════════
@@ -135,12 +155,13 @@ const ChatMessageItem = memo(function ChatMessageItem({
     transform: [{ translateX: translateX.value }],
     opacity: opacity.value,
   }));
+  const displayText = item.isUser ? item.text : normalizeAIText(item.text);
 
   const copyScale = useSharedValue(1);
   const likeScale = useSharedValue(1);
   const dislikeScale = useSharedValue(1);
 
-  const tapScale = (sv: Animated.SharedValue<number>) => {
+  const tapScale = (sv: SharedValue<number>) => {
     sv.value = withTiming(0.85, { duration: 80 }, () => {
       sv.value = withTiming(1, { duration: 120 });
     });
@@ -154,7 +175,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
     return (
       <Animated.View style={[styles.rowUser, animStyle]}>
         <View style={styles.userBubble}>
-          <Text style={styles.userText}>{item.text}</Text>
+          <Text style={styles.userText}>{displayText}</Text>
         </View>
       </Animated.View>
     );
@@ -165,19 +186,19 @@ const ChatMessageItem = memo(function ChatMessageItem({
       <View style={styles.aiContent}>
         {showTypewriter ? (
           <TypewriterText
-            text={item.text}
+            text={displayText}
             speed={18}
             style={styles.aiText}
             onComplete={() => onTypewriterComplete(item.id)}
           />
         ) : (
-          <Text style={styles.aiText}>{item.text}</Text>
+          <Text style={styles.aiText}>{displayText}</Text>
         )}
         {!showTypewriter && (
           <View style={styles.actionRow}>
             <Animated.View style={copyStyle}>
               <Pressable style={styles.actionBtn} hitSlop={8}
-                onPress={() => { tapScale(copyScale); onCopy(item.text); }}>
+                onPress={() => { tapScale(copyScale); onCopy(displayText); }}>
                 <Ionicons name="copy-outline" size={15} color="rgba(0,0,0,0.35)" />
               </Pressable>
             </Animated.View>
@@ -280,6 +301,7 @@ function ContextMenuItem({
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [inputText, setInputText] = useState('');
@@ -290,7 +312,6 @@ export default function ChatScreen() {
   const [isIncognito, setIsIncognito] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chatTitle, setChatTitle] = useState('New chat');
-  const [sessionId] = useState(() => Date.now().toString());
   const [userEmail, setUserEmail] = useState('');
   const [errorText, setErrorText] = useState<string | null>(null);
   const [showCrisisResources, setShowCrisisResources] = useState(false);
@@ -298,9 +319,26 @@ export default function ChatScreen() {
     new Set(['welcome'])
   );
 
+  // Chat state - Supabase backed
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
+  const [startTime, setStartTime] = useState<number>(Date.now());
+  const [chatFeedback, setChatFeedback] = useState<ChatFeedback>(null);
+
+  // Bottom sheet visibility
+  const [showRenameSheet, setShowRenameSheet] = useState(false);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
   const userIdRef = useRef<string | null>(null);
-  const tokenRef = useRef<string | null>(null);
+  const isFirstExchangeRef = useRef(true);
+
+  // Refs that shadow state — used in cleanup/unmount so we always
+  // see the latest values without adding them to effect deps.
+  const chatIdRef = useRef<string | null>(null);
+  const conversationRef = useRef<ChatMessage[]>([]);
+  const startTimeRef = useRef<number>(Date.now());
+  const chatEndedRef = useRef(false); // prevents double-endChat calls
 
   // Voice mic hook
   const {
@@ -322,25 +360,53 @@ export default function ChatScreen() {
     fullscreenStore.set(isFullscreen);
   }, [isFullscreen]);
 
-  // Cleanup fullscreen on unmount
-  useEffect(() => {
-    return () => { fullscreenStore.set(false); };
-  }, []);
+  // Keep refs in sync with state (for use in cleanup without stale closures)
+  useEffect(() => { chatIdRef.current = chatId; chatEndedRef.current = false; }, [chatId]);
+  useEffect(() => { conversationRef.current = conversation; }, [conversation]);
+  useEffect(() => { startTimeRef.current = startTime; }, [startTime]);
 
-  // Close sidebar when leaving the chat tab
+  // Cleanup on unmount ONLY — refs hold latest values, no stale closure
+  useEffect(() => {
+    return () => {
+      fullscreenStore.set(false);
+      if (chatIdRef.current && conversationRef.current.length > 0 && !chatEndedRef.current) {
+        chatEndedRef.current = true;
+        endChat(chatIdRef.current, conversationRef.current, startTimeRef.current);
+      }
+    };
+  }, []); // empty deps = true unmount only
+
+  // Close sidebar + reset fullscreen when leaving the chat tab
   useFocusEffect(
     useCallback(() => {
-      return () => { sidebarStore.close(); };
+      return () => {
+        sidebarStore.close();
+        // Always reset fullscreen when this screen loses focus (tab switch, back button, etc.)
+        setIsFullscreen(false);
+        fullscreenStore.set(false);
+      };
     }, [])
   );
 
+  // Intercept Android hardware back button — exit fullscreen first, navigate second
+  useEffect(() => {
+    const { BackHandler } = require('react-native');
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isFullscreen) {
+        setIsFullscreen(false);
+        return true; // consumed — don't navigate back
+      }
+      return false; // let default back navigation happen
+    });
+    return () => sub.remove();
+  }, [isFullscreen]);
+
   // Keep sidebar context up to date so it highlights the active session
   useEffect(() => {
-    sidebarStore.setContext({ currentSessionId: sessionId, currentTitle: chatTitle, userEmail });
-  }, [sessionId, chatTitle, userEmail]);
+    sidebarStore.setContext({ currentSessionId: chatId || '', currentTitle: chatTitle, userEmail });
+  }, [chatId, chatTitle, userEmail]);
 
   // Sidebar nav requests — subscribe here (hooks must be unconditional/ordered)
-  // The useEffect that *acts* on pendingNav is placed after handleNewChat/handleSelectSession
   const pendingNav = useSyncExternalStore(chatNavStore.subscribe, chatNavStore.getSnapshot);
 
   const visibleMessages = useMemo(
@@ -349,24 +415,23 @@ export default function ChatScreen() {
   );
   const chatState: 'greeting' | 'active' = visibleMessages.length === 0 ? 'greeting' : 'active';
 
-  // ─── Load history on mount ────────────────────────
+  // ─── Load user and most recent chat on mount ────────────────────────
   useEffect(() => {
     async function init() {
       try {
-        const [session, token] = await Promise.all([getSession(), getAccessToken()]);
-        userIdRef.current = session?.userId ?? null;
-        tokenRef.current = token;
-        if (session?.email) setUserEmail(session.email);
-
-        if (session?.userId && token) {
-          const stored = await loadChat(session.userId, token);
-          if (stored && stored.length > 0) {
-            const restored = fromStoredMessages(stored);
-            setMessages([WELCOME_MESSAGE, ...restored]);
-            setDisplayedMessageIds(new Set(['welcome', ...restored.map((m) => m.id)]));
-          }
+        // Get user from Supabase session
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.log('>>> No authenticated user');
+          setIsLoadingHistory(false);
+          return;
         }
-      } catch {
+
+        userIdRef.current = user.id;
+        setUserEmail(user.email || '');
+        console.log('>>> User loaded:', user.email, '— starting fresh chat');
+      } catch (err) {
+        console.error('>>> Init error:', err);
         // Non-fatal
       } finally {
         setIsLoadingHistory(false);
@@ -375,16 +440,25 @@ export default function ChatScreen() {
     init();
   }, []);
 
-  // ─── Auto-scroll ──────────────────────────────────
+  // ─── Auto-scroll on new messages ─────────────────
   useEffect(() => {
     if (messages.length > 1) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
     }
   }, [messages, isLoading]);
 
+  // ─── Scroll to bottom when keyboard opens ────────
+  useEffect(() => {
+    const { Keyboard } = require('react-native');
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+    return () => sub.remove();
+  }, []);
+
   // ─── Send ─────────────────────────────────────────
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || !userIdRef.current) return;
 
     const userText = inputText.trim();
     setInputText('');
@@ -405,7 +479,36 @@ export default function ChatScreen() {
     setIsLoading(true);
 
     try {
-      const aiText = await sendToBedrock(toBedrockMessages(withUser));
+      // Create chat if this is the first message
+      let currentChatId = chatId;
+      let currentConversation = conversation;
+
+      if (!currentChatId && !isIncognito) {
+        console.log('>>> Creating new chat for user:', userIdRef.current);
+        const newChat = await createChat(userIdRef.current, 'textchat');
+        if (newChat) {
+          currentChatId = newChat.id;
+          setChatId(newChat.id);
+          setStartTime(Date.now());
+          isFirstExchangeRef.current = true;
+        }
+      }
+
+      // Build conversation with user message
+      if (isIncognito) {
+        // In-memory only — never saved to DB
+        const userEntry: ChatMessage = { role: 'user', content: userText, timestamp: Date.now() };
+        currentConversation = [...currentConversation, userEntry];
+        setConversation(currentConversation);
+      } else if (currentChatId) {
+        currentConversation = await addMessage(currentChatId, 'user', userText, currentConversation);
+        setConversation(currentConversation);
+      }
+
+      // Send to AI with FULL conversation history for memory
+      const bedrockMessages = toBedrockFormat(currentConversation);
+      const aiText = normalizeAIText(await sendToBedrock(bedrockMessages));
+
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: aiText,
@@ -415,69 +518,104 @@ export default function ChatScreen() {
       const final = [...withUser, aiMsg];
       setMessages(final);
 
-      // Only persist when NOT in incognito mode
-      if (!isIncognito && userIdRef.current && tokenRef.current) {
-        saveChat(userIdRef.current, tokenRef.current, toStoredMessages(final));
-      }
+      // Store AI reply in conversation
+      if (isIncognito) {
+        // In-memory only
+        const aiEntry: ChatMessage = { role: 'assistant', content: aiText, timestamp: Date.now() };
+        currentConversation = [...currentConversation, aiEntry];
+        setConversation(currentConversation);
+      } else if (currentChatId) {
+        currentConversation = await addMessage(currentChatId, 'assistant', aiText, currentConversation);
+        setConversation(currentConversation);
 
-      // AI-generated title after the first exchange (same as Claude app)
-      // Fallback: truncated first user message if AI call fails
-      const isFirstExchange = visibleMessages.length === 0;
-      if (isFirstExchange && !isIncognito) {
-        const fallback = userText.length > 32
-          ? userText.slice(0, 32).trimEnd() + '…'
-          : userText;
-        aiGenerateChatTitle(toBedrockMessages(final)).then((title) => {
-          const resolved = title ?? fallback;
-          setChatTitle(resolved);
-          upsertSession(sessionId, resolved);
-        });
-      } else if (!isIncognito) {
-        // Update session timestamp on each subsequent message
-        upsertSession(sessionId, chatTitle);
+        // Generate title after first exchange
+        if (isFirstExchangeRef.current) {
+          isFirstExchangeRef.current = false;
+          generateAndSetTitle(currentChatId, currentConversation).then((title) => {
+            console.log('>>> Title generated:', title);
+            setChatTitle(title);
+          });
+        }
       }
     } catch (err: any) {
+      console.error('>>> Send error:', err);
       setErrorText(err.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, isLoading, messages, isIncognito, visibleMessages.length]);
+  }, [inputText, isLoading, messages, isIncognito, chatId, conversation]);
+
+  // ─── Finalize current chat (guarded — never fires twice) ────────────
+  const finalizeCurrentChat = useCallback(() => {
+    if (chatIdRef.current && conversationRef.current.length > 0 && !chatEndedRef.current) {
+      chatEndedRef.current = true;
+      endChat(chatIdRef.current, conversationRef.current, startTimeRef.current);
+    }
+  }, []);
 
   // ─── Sidebar ──────────────────────────────────────
-  const handleSelectSession = useCallback((_session: ChatSession) => {
-    // Future: restore session messages. For now just close the sidebar.
-    // Full multi-session restore requires per-session backend storage.
-  }, []);
+  const handleSelectSession = useCallback(async (session: ChatListItem) => {
+    console.log('>>> Loading chat:', session.id);
+    sidebarStore.close();
+
+    finalizeCurrentChat();
+
+    // Load selected chat
+    const loadedChat = await getChat(session.id);
+    if (loadedChat) {
+      setChatId(loadedChat.id);
+      setChatTitle(loadedChat.title || 'New chat');
+      setConversation(loadedChat.conversation || []);
+      setStartTime(loadedChat.start_time || Date.now());
+      setIsStarred(!!(loadedChat as any).is_starred);
+      setChatFeedback((loadedChat as any).feedback ?? null);
+      isFirstExchangeRef.current = (loadedChat.conversation || []).length === 0;
+
+      // Convert to display format
+      const restored: Message[] = (loadedChat.conversation || []).map((m, idx) => ({
+        id: `restored_${idx}`,
+        text: m.content,
+        isUser: m.role === 'user',
+        timestamp: new Date(m.timestamp),
+      }));
+      setMessages([WELCOME_MESSAGE, ...restored]);
+      setDisplayedMessageIds(new Set(['welcome', ...restored.map((m) => m.id)]));
+    }
+  }, [finalizeCurrentChat]);
 
   // ─── Incognito content fade ───────────────────────
   const contentOpacity = useSharedValue(1);
   const contentAnimStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
 
-  // Fade out → execute action → React re-renders → useEffect fades back in
   const fadeSwitchMode = useCallback((action: () => void) => {
     contentOpacity.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, () => {
       runOnJS(action)();
     });
   }, []);
 
-  // Fade in after isIncognito state has changed and re-rendered
   useEffect(() => {
     contentOpacity.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
   }, [isIncognito]);
 
   const handleStartIncognito = useCallback(() => {
+    finalizeCurrentChat();
     setIsIncognito(true);
+    setChatId(null);
+    setConversation([]);
     setMessages([WELCOME_MESSAGE]);
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('Incognito chat');
     setIsMenuOpen(false);
-  }, []);
+  }, [finalizeCurrentChat]);
 
   const handleExitIncognito = useCallback(() => {
     setIsIncognito(false);
+    setChatId(null);
+    setConversation([]);
     setMessages([WELCOME_MESSAGE]);
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('New chat');
+    isFirstExchangeRef.current = true;
   }, []);
 
   // ─── Message actions ──────────────────────────────
@@ -489,35 +627,48 @@ export default function ChatScreen() {
     Share.share({ message: text });
   }, []);
 
-  const handleLike = useCallback((_id: string) => {}, []);
-  const handleDislike = useCallback((_id: string) => {}, []);
+  const handleLike = useCallback((_id: string) => {
+    if (!chatId) return;
+    const next: ChatFeedback = chatFeedback === 'liked' ? null : 'liked';
+    setChatFeedback(next);
+    updateChatFeedback(chatId, next);
+  }, [chatId, chatFeedback]);
+
+  const handleDislike = useCallback((_id: string) => {
+    if (!chatId) return;
+    const next: ChatFeedback = chatFeedback === 'disliked' ? null : 'disliked';
+    setChatFeedback(next);
+    updateChatFeedback(chatId, next);
+  }, [chatId, chatFeedback]);
 
   // ─── Context menu ─────────────────────────────────
   const handleRename = useCallback(() => {
     setIsMenuOpen(false);
-    if (Platform.OS === 'ios') {
-      Alert.prompt('Rename chat', '', (t) => { if (t?.trim()) setChatTitle(t.trim()); }, 'plain-text', chatTitle);
-    } else {
-      // Android: Alert.prompt is unavailable — use a quick fallback Alert
-      Alert.alert('Rename chat', 'Enter a new title:', [
-        { text: 'Cancel', style: 'cancel' },
-        // Android doesn't support text input in Alert natively; open a toast hint
-        { text: 'Edit', onPress: () => {} },
-      ]);
-    }
-  }, [chatTitle]);
+    setShowRenameSheet(true);
+  }, []);
+
+  const handleRenameSave = useCallback(async (newTitle: string) => {
+    setChatTitle(newTitle);
+    if (chatId) await updateTitle(chatId, newTitle);
+  }, [chatId]);
 
   const handleNewChat = useCallback(() => {
+    console.log('>>> Starting new chat');
+    finalizeCurrentChat();
     setIsMenuOpen(false);
     setIsIncognito(false);
+    setChatId(null);
+    setConversation([]);
     setMessages([WELCOME_MESSAGE]);
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('New chat');
     setIsStarred(false);
     setErrorText(null);
-  }, []);
+    setStartTime(Date.now());
+    isFirstExchangeRef.current = true;
+    sidebarStore.close();
+  }, [finalizeCurrentChat]);
 
-  // Act on sidebar nav requests — placed after handleNewChat/handleSelectSession to avoid TDZ
   useEffect(() => {
     if (!pendingNav) return;
     chatNavStore.clear();
@@ -530,22 +681,28 @@ export default function ChatScreen() {
 
   const handleDelete = useCallback(() => {
     setIsMenuOpen(false);
-    Alert.alert('Delete chat', 'Are you sure you want to delete this conversation?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive', onPress: () => {
-          setMessages([WELCOME_MESSAGE]);
-          setDisplayedMessageIds(new Set(['welcome']));
-          setChatTitle('New chat');
-          setIsStarred(false);
-          if (userIdRef.current && tokenRef.current) {
-            saveChat(userIdRef.current, tokenRef.current, []);
-          }
-          deleteSession(sessionId);
-        },
-      },
-    ]);
+    setShowDeleteSheet(true);
   }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (chatId) await deleteChat(chatId);
+    setChatId(null);
+    setConversation([]);
+    setMessages([WELCOME_MESSAGE]);
+    setDisplayedMessageIds(new Set(['welcome']));
+    setChatTitle('New chat');
+    setIsStarred(false);
+    setChatFeedback(null);
+    setStartTime(Date.now());
+    isFirstExchangeRef.current = true;
+  }, [chatId]);
+
+  const handleStar = useCallback(() => {
+    setIsMenuOpen(false);
+    const next = !isStarred;
+    setIsStarred(next);
+    if (chatId) starChat(chatId, next);
+  }, [chatId, isStarred]);
 
   // ─── Render message ───────────────────────────────
   const renderMessage = useCallback(({ item }: { item: Message }) => {
@@ -587,10 +744,8 @@ export default function ChatScreen() {
   }, [isLoading, errorText]);
 
   // ─── Header subtitle slide-up ─────────────────────
-  // Height animates 0 → SUBTITLE_H so the logo is truly inline (no reserved
-  // space) at rest. As height grows the logo shifts up naturally.
   const SUBTITLE_H = 16;
-  const subtitleVisible = chatState === 'active' || isIncognito;
+  const subtitleVisible = true; // Always show subtitle
   const subtitleH = useSharedValue(subtitleVisible ? SUBTITLE_H : 0);
   const subtitleOpacity = useSharedValue(subtitleVisible ? 1 : 0);
 
@@ -610,18 +765,9 @@ export default function ChatScreen() {
     overflow: 'hidden',
   }));
 
-  // ─── Input focus state (plain, no Reanimated — avoids layout fighting
-  //     with multiline TextInput during fullscreen resize)
   const [inputFocused, setInputFocused] = useState(false);
 
-  // ─── Fullscreen button highlight ──────────────────
-  const fsBgOpacity = useSharedValue(0);
-  const fsBtnStyle  = useAnimatedStyle(() => ({
-    backgroundColor: `rgba(185,166,255,${fsBgOpacity.value})`,
-  }));
-  useEffect(() => {
-    fsBgOpacity.value = withTiming(isFullscreen ? 1 : 0, { duration: 200 });
-  }, [isFullscreen]);
+  // (fullscreen button removed — replaced by voice mode button)
 
   // ─── Send button scale ────────────────────────────
   const sendScale = useSharedValue(1);
@@ -639,11 +785,7 @@ export default function ChatScreen() {
   // ═══════════════════════════════════════════════════
 
   const paddingTop = insets.top + 12;
-  const headerSubtitleText = isIncognito
-    ? 'Incognito chat'
-    : chatState === 'active'
-      ? chatTitle
-      : '';
+  const headerSubtitleText = isIncognito ? 'Incognito chat' : 'text chat';
 
   return (
     <View style={styles.root}>
@@ -654,14 +796,28 @@ export default function ChatScreen() {
         onClose={handleOnboardingClose}
       />
 
-      {/* Context menu — absolute overlay, lives outside KAV so keyboard never shifts it */}
+      {/* ── Bottom sheets ── */}
+      <RenameChatSheet
+        visible={showRenameSheet}
+        currentTitle={chatTitle}
+        onClose={() => setShowRenameSheet(false)}
+        onSave={handleRenameSave}
+      />
+      <DeleteChatSheet
+        visible={showDeleteSheet}
+        chatTitle={chatTitle}
+        onClose={() => setShowDeleteSheet(false)}
+        onConfirm={handleDeleteConfirm}
+      />
+
+      {/* Context menu overlay */}
       {isMenuOpen && (
         <View style={styles.menuOverlay} pointerEvents="box-none">
           <ContextMenu
             chatTitle={chatTitle}
             isStarred={isStarred}
             onRename={handleRename}
-            onStar={() => { setIsStarred((v) => !v); setIsMenuOpen(false); }}
+            onStar={handleStar}
             onDelete={handleDelete}
             onNewChat={handleNewChat}
             onClose={() => setIsMenuOpen(false)}
@@ -669,12 +825,6 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/*
-        KAV wraps header + content + input.
-        iOS:     behavior="padding" adds bottom padding = keyboard height → input rides up.
-        Android: behavior="height" shrinks the KAV height → same visual effect.
-        app.json: softwareKeyboardLayoutMode="pan" makes Android pan the screen.
-      */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -696,17 +846,14 @@ export default function ChatScreen() {
           </View>
 
           {isIncognito ? (
-            /* X closes incognito */
             <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => fadeSwitchMode(handleExitIncognito)}>
               <Ionicons name="close" size={24} color="#1A1A1A" />
             </Pressable>
           ) : chatState === 'active' ? (
-            /* Three-dot opens context menu */
             <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => setIsMenuOpen((v) => !v)}>
               <Ionicons name="ellipsis-vertical" size={22} color="#1A1A1A" />
             </Pressable>
           ) : (
-            /* Eye-off starts incognito */
             <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => fadeSwitchMode(handleStartIncognito)}>
               <Ionicons name="eye-off-outline" size={22} color="#1A1A1A" />
             </Pressable>
@@ -716,7 +863,6 @@ export default function ChatScreen() {
         {/* ── Content ── */}
         <Animated.View style={[styles.flex, contentAnimStyle]}>
           {isIncognito && chatState === 'greeting' ? (
-            /* Incognito empty state */
             <View style={styles.greetingContainer}>
               <Ionicons name="eye-off-outline" size={48} color="#1A1A1A" style={styles.incognitoIcon} />
               <Text style={styles.incognitoTitle}>Incognito chat</Text>
@@ -725,18 +871,16 @@ export default function ChatScreen() {
               </Text>
             </View>
           ) : chatState === 'greeting' ? (
-            /* Normal greeting — centered vertically & horizontally */
             <View style={styles.greetingContainer}>
               <Text style={styles.greetingText}>
                 {'How can I help you\n' + getTimeGreeting()}
               </Text>
             </View>
           ) : (
-            /* Message list — fading edges for premium feel */
             <FadingScrollWrapper topFadeHeight={32} bottomFadeHeight={48}>
               <FlatList
                 ref={flatListRef}
-                data={messages}
+                data={visibleMessages}
                 renderItem={renderMessage}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.messageList}
@@ -751,7 +895,6 @@ export default function ChatScreen() {
         {/* ── Input bar ── */}
         <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, 8) + 8 }]}>
           {isRecording ? (
-            /* Recording mode — replaces the input pill */
             <RecordingBar
               elapsed={elapsed}
               isSpeaking={isSpeaking}
@@ -764,7 +907,6 @@ export default function ChatScreen() {
               inputFocused && styles.inputPillFocused,
               isIncognito && styles.inputPillIncognito,
             ]}>
-              {/* ── Text area — grows automatically, caps at ~5 lines ── */}
               <TextInput
                 style={styles.input}
                 placeholder={
@@ -784,37 +926,40 @@ export default function ChatScreen() {
                 onSubmitEditing={handleSendPress}
               />
 
-              {/* ── Button row — always at the bottom of the pill ── */}
               <View style={styles.inputButtonRow}>
-                {/* Fullscreen toggle — highlighted when active */}
-                <Animated.View style={[styles.iconBtn, styles.fsBtnWrap, fsBtnStyle]}>
-                  <Pressable
-                    style={styles.iconBtn}
-                    hitSlop={8}
-                    onPress={() => setIsFullscreen((v) => !v)}
-                  >
-                    <Ionicons
-                      name={isFullscreen ? 'contract-outline' : 'expand-outline'}
-                      size={20}
-                      color={isFullscreen ? '#fff' : 'rgba(0,0,0,0.45)'}
-                    />
-                  </Pressable>
-                </Animated.View>
-
                 {inputText.trim() ? (
-                  /* Send */
-                  <Animated.View style={sendScaleStyle}>
-                    <Pressable
-                      style={styles.sendBtn}
-                      onPress={handleSendPress}
-                      disabled={isLoading || isLoadingHistory}
-                    >
-                      <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-                    </Pressable>
-                  </Animated.View>
+                  <View style={styles.buttonContainer}>
+                    <View style={styles.micButtonPlaceholder} />
+                    
+                    <Animated.View style={sendScaleStyle}>
+                      <Pressable
+                        style={styles.sendBtn}
+                        onPress={handleSendPress}
+                        disabled={isLoading || isLoadingHistory}
+                      >
+                        <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                      </Pressable>
+                    </Animated.View>
+                  </View>
                 ) : (
-                  /* Mic */
-                  <MicButton onPress={handleMicPress} />
+                  <View style={styles.buttonContainer}>
+                    <MicButton onPress={handleMicPress} />
+                    
+                    {/* Voice mode button — navigates to voice chat tab (hidden when typing) */}
+                    <Pressable
+                      style={styles.voiceModeBtn}
+                      onPress={() => router.navigate('/(main)/call' as any)}
+                      hitSlop={6}
+                    >
+                      <View style={styles.voiceWaveform}>
+                        <View style={[styles.voiceBar, styles.voiceBarShort]} />
+                        <View style={[styles.voiceBar, styles.voiceBarTall]} />
+                        <View style={[styles.voiceBar, styles.voiceBarPeak]} />
+                        <View style={[styles.voiceBar, styles.voiceBarTall]} />
+                        <View style={[styles.voiceBar, styles.voiceBarShort]} />
+                      </View>
+                    </Pressable>
+                  </View>
                 )}
               </View>
             </View>
@@ -936,7 +1081,7 @@ const styles = StyleSheet.create({
   },
   contextMenuDanger: { color: '#EF4444' },
 
-  // ── Greeting (centered in remaining space) ──
+  // ── Greeting ──
   greetingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -975,13 +1120,13 @@ const styles = StyleSheet.create({
   // ── Messages ──
   messageList: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    gap: 10,
+    paddingTop: 12,       // ↓ was 8
+    paddingBottom: 35,    // ↓ was 12
   },
   rowUser: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    marginBottom: 2,     // ↓ was 6
   },
   userBubble: {
     backgroundColor: '#ffffffad',
@@ -1000,10 +1145,12 @@ const styles = StyleSheet.create({
   rowAI: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
+    marginBottom: 2,     // ↓ was 6
   },
+  // KEY FIX: removed flex:1 which was stretching AI rows to fill remaining space
   aiContent: {
-    flex: 1,
-    paddingRight: 40,
+    maxWidth: '85%',     // replaces flex:1 — constrains width without stretching height
+    paddingRight: 8,     // ↓ was 40 — that extra right padding was adding dead space
   },
   aiText: {
     fontFamily: 'Outfit-Regular',
@@ -1014,7 +1161,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 4,
     gap: 4,
   },
   actionBtn: {
@@ -1077,7 +1224,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1A1A1A',
     lineHeight: 22,
-    // Let it grow naturally; cap at ~5 lines to keep pill manageable
     minHeight: 22,
     maxHeight: 110,
     paddingTop: 0,
@@ -1089,25 +1235,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginTop: 6,
-    gap: 2,
+    gap: 10,
   },
-  iconBtn: {
-    width: 38,
-    height: 38,
+  buttonContainer: {
+    width: 90,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
   },
-  fsBtnWrap: {
-    borderRadius: 10,
-    overflow: 'hidden',
+  micButtonPlaceholder: {
+    width: 48,
+    height: 54,
   },
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  voiceModeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#050505',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceWaveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1.5,
+  },
+  voiceDot: {
+    width: 2.5,
+    height: 4,
+    borderRadius: 1.25,
+    backgroundColor: '#FFFFFF',
+    opacity: 0.92,
+  },
+  voiceBar: {
+    width: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: '#FFFFFF',
+  },
+  voiceBarShort: {
+    height: 5,
+  },
+  voiceBarTall: {
+    height: 11,
+  },
+  voiceBarPeak: {
+    height: 14,
   },
 
   // ── Crisis modal ──

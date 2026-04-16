@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, StatusBar } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import LightGradient, { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
 import MoodTrendChart from './MoodTrendChart';
@@ -32,6 +33,17 @@ export default function MoodHistoryScreen() {
   const [chartData, setChartData] = useState<{ date: string; score: number }[]>([]);
   const [allCheckIns, setAllCheckIns] = useState<MoodCheckIn[]>([]);
   const [recentCheckIns, setRecentCheckIns] = useState<MoodCheckIn[]>([]);
+
+  const paddingTop = insets.top + 12;
+  const subtitleH = useSharedValue(16);
+  const subtitleOpacity = useSharedValue(1);
+  const headerSubtitleText = 'Mood History';
+
+  const subtitleAnimStyle = useAnimatedStyle(() => ({
+    height: subtitleH.value,
+    opacity: subtitleOpacity.value,
+    overflow: 'hidden',
+  }));
 
   const loadData = useCallback(async () => {
     const days = period === 'weekly' ? 7 : 30;
@@ -67,65 +79,76 @@ export default function MoodHistoryScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: insets.top + 16, paddingBottom: 120 },
-        ]}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={LIGHT_THEME.textSecondary} />
+        <View style={[styles.header, { paddingTop }]}>
+          <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
           </Pressable>
-          <Text style={styles.headerTitle}>Mood History</Text>
-          <View style={{ width: 36 }} />
-        </View>
 
-        {/* Period Toggle */}
-        <View style={styles.toggleRow}>
-          <Pressable
-            style={[styles.toggleButton, period === 'weekly' && styles.toggleActive]}
-            onPress={() => setPeriod('weekly')}
-          >
-            <Text style={[styles.toggleText, period === 'weekly' && styles.toggleTextActive]}>
-              Weekly
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleButton, period === 'monthly' && styles.toggleActive]}
-            onPress={() => setPeriod('monthly')}
-          >
-            <Text style={[styles.toggleText, period === 'monthly' && styles.toggleTextActive]}>
-              Monthly
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Chart */}
-        <View style={styles.chartCard}>
-          <MoodTrendChart data={chartData} period={period} />
-        </View>
-
-        {/* Insight */}
-        <MoodInsightCard checkIns={allCheckIns} period={period} />
-
-        {/* Recent Check-ins */}
-        {recentCheckIns.length > 0 && (
-          <View style={styles.recentSection}>
-            <Text style={styles.sectionTitle}>RECENT CHECK-INS</Text>
-            {recentCheckIns.map((checkIn) => (
-              <View key={checkIn.id} style={styles.checkInItem}>
-                <Text style={styles.checkInEmoji}>
-                  {MOOD_EMOJIS[checkIn.moodId] ?? '😐'}
-                </Text>
-                <View style={styles.checkInContent}>
-                  <Text style={styles.checkInMood}>{checkIn.moodLabel}</Text>
-                  <Text style={styles.checkInDate}>{formatCheckInDate(checkIn.date)}</Text>
-                </View>
-              </View>
-            ))}
+          <View style={styles.headerCenter}>
+            <Text style={styles.logoText}>mello</Text>
+            <Animated.View style={subtitleAnimStyle}>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {headerSubtitleText}
+              </Text>
+            </Animated.View>
           </View>
-        )}
+
+          <View style={styles.headerSpacer} />
+        </View>
+
+        {/* Content */}
+        <View style={[
+          styles.scrollContent,
+          { paddingBottom: 120 },
+        ]}>
+          {/* Period Toggle */}
+          <View style={styles.toggleRow}>
+            <Pressable
+              style={[styles.toggleButton, period === 'weekly' && styles.toggleActive]}
+              onPress={() => setPeriod('weekly')}
+            >
+              <Text style={[styles.toggleText, period === 'weekly' && styles.toggleTextActive]}>
+                Weekly
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.toggleButton, period === 'monthly' && styles.toggleActive]}
+              onPress={() => setPeriod('monthly')}
+            >
+              <Text style={[styles.toggleText, period === 'monthly' && styles.toggleTextActive]}>
+                Monthly
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Chart */}
+          <View style={styles.chartCard}>
+            <MoodTrendChart data={chartData} period={period} />
+          </View>
+
+          {/* Insight */}
+          <MoodInsightCard checkIns={allCheckIns} period={period} />
+
+          {/* Recent Check-ins */}
+          {recentCheckIns.length > 0 && (
+            <View style={styles.recentSection}>
+              <Text style={styles.sectionTitle}>RECENT CHECK-INS</Text>
+              {recentCheckIns.map((checkIn) => (
+                <View key={checkIn.id} style={styles.checkInItem}>
+                  <Text style={styles.checkInEmoji}>
+                    {MOOD_EMOJIS[checkIn.moodId] ?? '😐'}
+                  </Text>
+                  <View style={styles.checkInContent}>
+                    <Text style={styles.checkInMood}>{checkIn.moodLabel}</Text>
+                    <Text style={styles.checkInDate}>{formatCheckInDate(checkIn.date)}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -145,23 +168,43 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  backButton: {
-    width: 36,
-    height: 36,
+
+  headerBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: LIGHT_THEME.surface,
-    borderRadius: 18,
-    ...CARD_SHADOW,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Outfit-SemiBold',
-    color: LIGHT_THEME.textPrimary,
+
+  headerSpacer: {
+    width: 40,
+    height: 40,
+  },
+
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  logoText: {
+    fontFamily: 'Playwrite',
+    fontSize: 26,
+    color: '#1A1A1A',
+    lineHeight: 32,
+    marginBottom: 10,
+  },
+
+  headerSubtitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 1,
   },
 
   // Toggle

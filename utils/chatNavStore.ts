@@ -10,11 +10,11 @@
  * getSnapshot() on mount and schedules a render if the value is non-null.
  */
 
-import type { ChatSession } from '@/services/chat/sessionHistory';
+import type { ChatListItem } from '@/services/chat/chatService';
 
 export type ChatNavRequest =
   | { type: 'new-chat' }
-  | { type: 'select-session'; session: ChatSession }
+  | { type: 'select-session'; session: ChatListItem }
   | null;
 
 let pending: ChatNavRequest = null;

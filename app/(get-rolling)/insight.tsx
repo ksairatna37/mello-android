@@ -30,6 +30,7 @@ import AnimatedText from '@/components/get-rolling/AnimatedText';
 import { FadingScrollWrapper } from '@/components/get-rolling/ScrollFadeEdges';
 import { getOnboardingData, saveCurrentStep, updateOnboardingData } from '@/utils/onboardingStorage';
 import { syncOnboardingToBackend } from '@/services/onboarding';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SAFE PERSONALIZATION PHILOSOPHY
@@ -98,6 +99,7 @@ const CURRENT_STEP = 5;
 export default function InsightScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { completeOnboarding } = useAuth();
 
   const [flowState, setFlowState] = useState<FlowState>('typing_indicator');
   const [showBottomIndicator, setShowBottomIndicator] = useState(true);
@@ -186,13 +188,16 @@ export default function InsightScreen() {
     await updateOnboardingData({ currentStep: undefined });
     // Sync all onboarding data (including get-rolling) to backend
     await syncOnboardingToBackend();
-    router.replace(DEFAULT_MAIN_ROUTE);
+    // Mark first_login: true in Supabase profiles — this is what checkUserStatus reads
+    // Without this the user is sent back to onboarding on every login
+    await completeOnboarding();
   };
   const handleClose = async () => {
     await updateOnboardingData({ currentStep: undefined });
     // Sync all onboarding data to backend
     await syncOnboardingToBackend();
-    router.replace(DEFAULT_MAIN_ROUTE);
+    // Mark first_login: true in Supabase profiles
+    await completeOnboarding();
   };
 
 

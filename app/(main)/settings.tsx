@@ -3,7 +3,7 @@
  * Clean white cards with soft shadows
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,15 +13,29 @@ import {
   Linking,
   Alert,
   StatusBar,
+  TouchableOpacity,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 
 import { LIGHT_THEME, CARD_SHADOW } from '@/components/common/LightGradient';
 import MelloGradient from '@/components/common/MelloGradient';
 import { useAuth } from '@/contexts/AuthContext';
 import SignOutBottomSheet from '@/components/settings/SignOutBottomSheet';
+import CrisisCheckSheet from '@/components/onboarding/CrisisCheckSheet';
+import { getOnboardingData } from '@/utils/onboardingStorage';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface SettingsItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -29,6 +43,7 @@ interface SettingsItemProps {
   subtitle?: string;
   onPress: () => void;
   isDestructive?: boolean;
+  muted?: boolean;
 }
 
 const SettingsItem = ({
@@ -37,51 +52,151 @@ const SettingsItem = ({
   subtitle,
   onPress,
   isDestructive,
+  muted,
 }: SettingsItemProps) => (
-  <Pressable style={styles.settingsItem} onPress={onPress}>
-    <View style={[styles.settingsIconCircle, isDestructive && styles.iconDestructive]}>
+  <Pressable style={[styles.settingsItem, muted && styles.settingsItemMuted]} onPress={onPress}>
+    <View style={[styles.settingsIconCircle, isDestructive && styles.iconDestructive, muted && styles.iconMuted]}>
       <Ionicons
         name={icon}
         size={20}
-        color={isDestructive ? '#E53E3E' : LIGHT_THEME.accent}
+        color={isDestructive ? '#E53E3E' : muted ? LIGHT_THEME.textMuted : LIGHT_THEME.accent}
       />
     </View>
     <View style={styles.settingsItemContent}>
-      <Text style={[styles.settingsTitle, isDestructive && styles.settingsDestructive]}>
+      <Text style={[styles.settingsTitle, isDestructive && styles.settingsDestructive, muted && styles.settingsMuted]}>
         {title}
       </Text>
       {subtitle && <Text style={styles.settingsSubtitle}>{subtitle}</Text>}
     </View>
-    <Ionicons name="chevron-forward" size={18} color={LIGHT_THEME.textMuted} />
+    <Ionicons name="chevron-forward" size={18} color={muted ? '#C0C0C0' : LIGHT_THEME.textMuted} />
   </Pressable>
 );
+
+// ─── Google Auth Bottom Sheet ────────────────────────────────────────────────
+
+interface GoogleAuthSheetProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
+function GoogleAuthSheet({ visible, onClose }: GoogleAuthSheetProps) {
+  const insets = useSafeAreaInsets();
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  const translateY = useSharedValue(SCREEN_HEIGHT);
+  const backdropOpacity = useSharedValue(0);
+  const scale = useSharedValue(0.96);
+
+  const hideModal = useCallback(() => {
+    setIsVisible(false);
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (visible) {
+      setIsVisible(true);
+      backdropOpacity.value = withTiming(1, { duration: 350 });
+      translateY.value = withSpring(0, { damping: 50, stiffness: 150, mass: 0.5 });
+      scale.value = withSpring(1, { damping: 50, stiffness: 150, mass: 0.8 });
+    } else if (isVisible) {
+      backdropOpacity.value = withTiming(0, { duration: 300 });
+      scale.value = withTiming(0.96, { duration: 300 });
+      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+        if (finished) runOnJS(hideModal)();
+      });
+    }
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+
+  const handleClose = () => {
+    backdropOpacity.value = withTiming(0, { duration: 300 });
+    scale.value = withTiming(0.96, { duration: 300 });
+    translateY.value = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+      if (finished) runOnJS(hideModal)();
+    });
+  };
+
+  if (!isVisible) return null;
+
+  return (
+    <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
+      <View style={{ flex: 1 }}>
+        <Animated.View style={[gaStyles.backdrop, backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+
+        <Animated.View style={[gaStyles.sheet, sheetStyle, { bottom: 16 }]}>
+          <View style={gaStyles.handleBar} />
+          <View style={[gaStyles.content, { paddingBottom: insets.bottom > 0 ? insets.bottom : 24 }]}>
+            {/* Google icon badge */}
+            <View style={gaStyles.iconBadge}>
+              <Ionicons name="logo-google" size={28} color="#4285F4" />
+            </View>
+
+            <Text style={gaStyles.title}>Signed in with Google</Text>
+            <Text style={gaStyles.subtitle}>
+              Your account uses Google Sign-In. To change your password, manage it through your Google account settings.
+            </Text>
+
+            <TouchableOpacity style={gaStyles.gotItButton} onPress={handleClose} activeOpacity={0.85}>
+              <Text style={gaStyles.gotItText}>Got It</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signOut, user, emailUser, loading } = useAuth();
   const [showSignOutSheet, setShowSignOutSheet] = useState(false);
+  const [showCrisisSheet, setShowCrisisSheet] = useState(false);
+  const [showGoogleAuthSheet, setShowGoogleAuthSheet] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
 
   // Get current user email for display
   const currentEmail = user?.email || emailUser?.email || 'user@example.com';
+  
+  // Check if user is logged in with Google auth
+  const isGoogleAuth = !!user && !emailUser;
+
+  // Check onboarding completion on mount
+  useEffect(() => {
+    async function checkOnboarding() {
+      try {
+        const data = await getOnboardingData();
+        setIsOnboardingCompleted(!!data.onboardingCompleted);
+      } catch (err) {
+        console.error('Error checking onboarding status:', err);
+      }
+    }
+    checkOnboarding();
+  }, []);
 
   const handleCrisisResources = () => {
-    Alert.alert(
-      'Crisis Support',
-      'If you\'re in crisis, help is available:\n\n' +
-        'National Suicide Prevention Lifeline: 988\n\n' +
-        'Crisis Text Line: Text HOME to 741741\n\n' +
-        'You are not alone. Help is always available.',
-      [
-        { text: 'Call 988', onPress: () => Linking.openURL('tel:988') },
-        {
-          text: 'Text 741741',
-          onPress: () => Linking.openURL('sms:741741?body=HOME'),
-        },
-        { text: 'Close', style: 'cancel' },
-      ]
-    );
+    setShowCrisisSheet(true);
+  };
+
+  const handleCrisisSheetClose = () => {
+    setShowCrisisSheet(false);
+  };
+
+  const handleCrisisSheetContinue = () => {
+    setShowCrisisSheet(false);
+  };
+
+  const handleTalkToMello = () => {
+    setShowCrisisSheet(false);
+    // Navigate to chat tab
+    router.navigate('/(main)/chat' as any);
   };
 
   const handlePrivacyPolicy = () => {
@@ -120,6 +235,14 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleChangePassword = () => {
+    if (isGoogleAuth) {
+      setShowGoogleAuthSheet(true);
+    } else {
+      router.push('/change-password');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -130,11 +253,16 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 20, paddingBottom: 20 },
+          { paddingBottom: 20 },
         ]}
       >
-        {/* Header */}
-        <Text style={styles.headerTitle}>Settings</Text>
+        {/* ── Header ── */}
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.headerCenter}>
+            <Text style={styles.logoText}>mello</Text>
+            <Text style={styles.headerSubtitle}>Settings</Text>
+          </View>
+        </View>
 
         {/* Crisis Resources - Prominent */}
         <View style={styles.section}>
@@ -163,7 +291,8 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="lock-closed-outline"
               title="Change Password"
-              onPress={() => router.push('/change-password')}
+              onPress={handleChangePassword}
+              muted={isGoogleAuth}
             />
           </View>
         </View>
@@ -222,6 +351,21 @@ export default function SettingsScreen() {
         onSignOut={handleConfirmSignOut}
         loading={signingOut}
       />
+
+      {/* Crisis Check Sheet */}
+      <CrisisCheckSheet
+        visible={showCrisisSheet}
+        onClose={handleCrisisSheetClose}
+        onContinue={handleCrisisSheetContinue}
+        isOnboardingCompleted={isOnboardingCompleted}
+        onTalkToMello={handleTalkToMello}
+      />
+
+      {/* Google Auth Sheet */}
+      <GoogleAuthSheet
+        visible={showGoogleAuthSheet}
+        onClose={() => setShowGoogleAuthSheet(false)}
+      />
     </View>
   );
 }
@@ -237,6 +381,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
+  // ── Header ──
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  logoText: {
+    fontFamily: 'Playwrite',
+    fontSize: 26,
+    color: '#1A1A1A',
+    lineHeight: 32,
+    marginBottom: 10,
+  },
+  headerSubtitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 1,
+  },
+
   headerTitle: {
     fontSize: 28,
     fontFamily: 'Outfit-SemiBold',
@@ -246,6 +421,7 @@ const styles = StyleSheet.create({
 
   section: {
     marginBottom: 20,
+    marginTop: 16,
   },
   sectionTitle: {
     fontSize: 12,
@@ -275,6 +451,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
+  settingsItemMuted: {
+    opacity: 0.5,
+  },
   settingsIconCircle: {
     width: 36,
     height: 36,
@@ -287,6 +466,9 @@ const styles = StyleSheet.create({
   iconDestructive: {
     backgroundColor: '#FED7D7',
   },
+  iconMuted: {
+    backgroundColor: '#E0E0E0',
+  },
   settingsItemContent: {
     flex: 1,
   },
@@ -294,6 +476,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Outfit-Medium',
     color: LIGHT_THEME.textPrimary,
+  },
+  settingsMuted: {
+    color: LIGHT_THEME.textMuted,
   },
   settingsSubtitle: {
     fontSize: 13,
@@ -334,5 +519,81 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 32,
     lineHeight: 18,
+  },
+});
+
+// ─── Google Auth Sheet Styles ───────────────────────────────────────────────
+
+const gaStyles = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    zIndex: 998,
+  },
+  sheet: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    minHeight: 320,
+    zIndex: 999,
+    overflow: 'hidden',
+    borderRadius: 40,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  iconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F0F4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontSize: 15,
+    fontFamily: 'Outfit-Regular',
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  gotItButton: {
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  gotItText: {
+    fontSize: 16,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
   },
 });

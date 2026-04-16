@@ -1,5 +1,5 @@
 /**
- * HomeScreen - Balanced home landing screen
+ * HomeScreen - Redesigned with clean structure, reference-inspired layout
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -16,8 +16,11 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  Easing,
   Extrapolate,
   FadeIn,
+  FadeInDown,
+  LinearTransition,
   interpolate,
   runOnJS,
   useAnimatedScrollHandler,
@@ -38,6 +41,7 @@ import DailyCheckInCard from '@/components/home/DailyCheckInCard';
 import PrimaryToolCard from '@/components/home/PrimaryToolCard';
 import SecondaryToolCard from '@/components/home/SecondaryToolCard';
 import { getAvatar } from '@/utils/onboardingStorage';
+import { sidebarStore } from '@/utils/sidebarStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ZOOMED_AVATAR_SIZE = SCREEN_WIDTH * 0.6;
@@ -48,6 +52,52 @@ const TODAY_FOCUS = [
   'You do not need to solve everything today, just stay with yourself kindly.',
   'A small check-in still counts as care.',
 ];
+
+const SUGGESTED_ACTIVITIES = [
+  {
+    id: 'yoga',
+    icon: 'body-outline' as const,
+    emoji: '🧘',
+    label: 'Yoga',
+    sublabel: 'Calm · Meditate',
+    duration: '10 min',
+    level: 'Beginner',
+    accentColor: '#DDD4FF',
+    iconColor: '#6F5DC5',
+    pillColor: '#EEE9FF',
+    artColor: '#F4F0FF',
+  },
+  {
+    id: 'meditation',
+    icon: 'flower-outline' as const,
+    emoji: '🌸',
+    label: 'Meditation',
+    sublabel: 'Breathe · Meditate',
+    duration: '5 min',
+    level: 'Fundamental',
+    accentColor: '#CDBCFF',
+    iconColor: '#604DB8',
+    pillColor: '#E5DDFF',
+    artColor: '#F0EAFF',
+  },
+  {
+    id: 'breathing',
+    icon: 'leaf-outline' as const,
+    emoji: '🍃',
+    label: 'Mindfulness Yoga',
+    sublabel: 'Breathe · Meditate',
+    duration: '3 min',
+    level: 'Fundamental',
+    accentColor: '#B9A6FF',
+    iconColor: '#4F3B9B',
+    pillColor: '#D8CDFF',
+    artColor: '#E8E1FF',
+  },
+];
+
+const ACTIVITY_STACK_TRANSITION = LinearTransition
+  .duration(280)
+  .easing(Easing.out(Easing.cubic));
 
 const RECENT_ACTIVITY_ITEMS = [
   {
@@ -90,31 +140,9 @@ const RECENT_ACTIVITY_ITEMS = [
 
 function getGreeting() {
   const hour = new Date().getHours();
-
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
-}
-
-function getTodayLabel() {
-  const now = new Date();
-  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-
-  return `${weekdays[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
 }
 
 function getFocusMessage() {
@@ -134,16 +162,27 @@ export default function HomeScreen() {
   });
   const [showZoomModal, setShowZoomModal] = useState(false);
   const [checkInComplete, setCheckInComplete] = useState(false);
+  const [activeActivity, setActiveActivity] = useState<string>('breathing');
 
   const zoomScale = useSharedValue(0);
   const backdropOpacity = useSharedValue(0);
+
+  const paddingTop = insets.top + 12;
+  const subtitleH = useSharedValue(16);
+  const subtitleOpacity = useSharedValue(1);
+  const headerSubtitleText = 'Home';
+
+  const subtitleAnimStyle = useAnimatedStyle(() => ({
+    height: subtitleH.value,
+    opacity: subtitleOpacity.value,
+    overflow: 'hidden',
+  }));
 
   useEffect(() => {
     const loadAvatar = async () => {
       const avatarData = await getAvatar();
       setAvatar(avatarData);
     };
-
     loadAvatar();
   }, []);
 
@@ -153,18 +192,13 @@ export default function HomeScreen() {
     },
   });
 
-  const logoAnimatedStyle = useAnimatedStyle(() => {
-    const scale = interpolate(scrollY.value, [0, 120], [1, 0.78], Extrapolate.CLAMP);
-    const translateY = interpolate(scrollY.value, [0, 120], [0, -4], Extrapolate.CLAMP);
-
-    return {
-      transform: [{ scale }, { translateY }],
-    };
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(scrollY.value, [0, 60], [1, 0.92], Extrapolate.CLAMP);
+    return { opacity };
   });
 
   const openZoomModal = useCallback(() => {
     if (!avatar.value) return;
-
     setShowZoomModal(true);
     backdropOpacity.value = withTiming(1, { duration: 250 });
     zoomScale.value = withTiming(1, { duration: 250 });
@@ -185,22 +219,35 @@ export default function HomeScreen() {
     transform: [{ scale: zoomScale.value }],
   }));
 
+  const orderedActivities = [
+    ...SUGGESTED_ACTIVITIES.filter((activity) => activity.id !== activeActivity),
+    ...SUGGESTED_ACTIVITIES.filter((activity) => activity.id === activeActivity),
+  ];
+
+  const handleActivityPress = useCallback((id: string) => {
+    setActiveActivity(id);
+  }, []);
+
+  const handleActivityPlay = useCallback((id: string) => {
+    setActiveActivity(id);
+    if (id === 'yoga' || id === 'meditation' || id === 'breathing') {
+      router.navigate('/(main)/breathing');
+    }
+  }, [router]);
+
   const handleRecentPress = useCallback((id: string) => {
     if (id === 'journal') {
       router.navigate('/(main)/journal');
       return;
     }
-
     if (id === 'mood') {
       router.navigate('/(main)/mood-history');
       return;
     }
-
     if (id === 'breathing') {
       router.navigate('/(main)/breathing');
       return;
     }
-
     router.navigate('/(main)/chat');
   }, [router]);
 
@@ -213,95 +260,139 @@ export default function HomeScreen() {
         <AnimatedScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingTop: insets.top + 12, paddingBottom: 88 + insets.bottom },
+            { paddingTop: insets.top + 8, paddingBottom: 88 + insets.bottom },
           ]}
           onScroll={onScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
-            <View style={styles.headerContent}>
-              <Animated.View style={logoAnimatedStyle}>
-                <Text style={styles.logoText}>mello</Text>
+          {/* ── Header ── */}
+          <View style={[styles.header]}>
+            <View style={styles.headerCenter}>
+              <Text style={styles.logoText}>mello</Text>
+              <Animated.View style={subtitleAnimStyle}>
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {headerSubtitleText}
+                </Text>
               </Animated.View>
+            </View>
+          </View>
 
-              <Pressable
-                onLongPress={() => router.navigate('/(main)/settings')}
-                onPress={openZoomModal}
-                style={styles.profileButton}
-              >
-                <View style={styles.profileAvatar}>
-                  {avatar.type === 'emoji' && avatar.value ? (
-                    <Text style={styles.avatarEmoji}>{avatar.value}</Text>
-                  ) : avatar.type === 'image' && avatar.value ? (
-                    <Image source={{ uri: avatar.value }} style={styles.avatarImage} />
-                  ) : (
-                    <Ionicons color={LIGHT_THEME.textSecondary} name="person" size={16} />
-                  )}
+          {/* ── DAILY CHECK IN ── */}
+          <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.sectionBlock}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Daily mood check</Text>
+              {checkInComplete && (
+                <View style={styles.doneBadge}>
+                  <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+                  <Text style={styles.doneBadgeText}>Done</Text>
                 </View>
+              )}
+            </View>
+            <Text style={styles.sectionCaption}>
+              {checkInComplete
+                ? 'Nice work. You showed up for yourself.'
+                : 'How are you feeling today? Take a moment to check in with yourself.'}
+            </Text>
+            <DailyCheckInCard onCheckInComplete={() => setCheckInComplete(true)} />
+          </Animated.View>
+
+          {/* ── SUGGESTED ACTIVITIES ── */}
+          <Animated.View entering={FadeInDown.duration(400).delay(160)} style={styles.sectionBlock}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Suggested activities</Text>
+              <Pressable onPress={() => router.navigate('/(main)/breathing')}>
+                <Text style={styles.seeAllText}>See all</Text>
               </Pressable>
+            </View>
+
+            <View style={styles.activityList}>
+              {orderedActivities.map((activity, index) => {
+                const isActive = activity.id === activeActivity;
+
+                return (
+                  <Animated.View
+                    key={activity.id}
+                    layout={ACTIVITY_STACK_TRANSITION}
+                    style={[
+                      styles.activityCardWrap,
+                      index !== 0 && styles.activityCardOverlap,
+                      { zIndex: index + 1 },
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => handleActivityPress(activity.id)}
+                      style={({ pressed }) => [
+                        styles.activityCard,
+                        isActive ? styles.activityCardActive : styles.activityCardInactive,
+                        { backgroundColor: activity.accentColor },
+                        pressed && styles.activityCardPressed,
+                      ]}
+                    >
+                      {/* LEFT: text only — no icon */}
+                      <View style={styles.activityLeft}>
+                        <View style={styles.activityTextBlock}>
+                          <Text style={styles.activityLabel}>{activity.label}</Text>
+                          <Text style={styles.activitySublabel}>{activity.sublabel}</Text>
+                        </View>
+
+                        {isActive && (
+                          <View style={styles.activityMeta}>
+                            <View style={styles.activityMetaItem}>
+                              <Ionicons name="time-outline" size={13} color="#54468E" />
+                              <Text style={styles.activityMetaText}>{activity.duration}</Text>
+                            </View>
+                            <View style={styles.activityMetaItem}>
+                              <Ionicons name="barbell-outline" size={13} color="#54468E" />
+                              <Text style={styles.activityMetaText}>{activity.level}</Text>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* RIGHT: artwork block with play button pinned to its top-right */}
+                      <View
+                        style={[
+                          styles.activityArtwork,
+                          isActive ? styles.activityArtworkActive : styles.activityArtworkInactive,
+                          { backgroundColor: activity.artColor },
+                        ]}
+                      >
+                        <Ionicons
+                          name={activity.icon}
+                          size={isActive ? 42 : 24}
+                          color={activity.iconColor}
+                        />
+
+                        {/* Play button absolutely positioned inside artwork, top-right */}
+                        <Pressable
+                          hitSlop={8}
+                          onPress={(event) => {
+                            event.stopPropagation?.();
+                            handleActivityPlay(activity.id);
+                          }}
+                          style={({ pressed }) => [
+                            styles.activityPlayButton,
+                            isActive && styles.activityPlayButtonActive,
+                            pressed && styles.activityPlayButtonPressed,
+                          ]}
+                        >
+                          <Ionicons name="play" size={isActive ? 14 : 12} color={activity.iconColor} />
+                        </Pressable>
+                      </View>
+                    </Pressable>
+                  </Animated.View>
+                );
+              })}
             </View>
           </Animated.View>
 
-          <View style={styles.heroCard}>
-            <LinearGradient
-              colors={['rgba(186, 166, 255, 0)', 'rgba(186, 166, 255, 0.16)']}
-              end={{ x: 0.5, y: 1 }}
-              pointerEvents="none"
-              start={{ x: 0.5, y: 0 }}
-              style={styles.heroCardGlow}
-            />
-
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.eyebrow}>{getTodayLabel()}</Text>
-                <Text style={styles.heroTitle}>{getGreeting()}</Text>
-                <Text style={styles.heroSubtitle}>
-                  Home is lighter now. Start with one small thing that helps.
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => router.navigate('/(main)/settings')}
-                style={styles.heroPill}
-              >
-                <Ionicons name="sparkles-outline" size={14} color={LIGHT_THEME.textPrimary} />
-                <Text style={styles.heroPillText}>Your safe space</Text>
-              </Pressable>
+          {/* ── QUICK CONNECT ── */}
+          {/* <Animated.View entering={FadeInDown.duration(400).delay(210)} style={styles.sectionBlock}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Talk to Mello</Text>
             </View>
-
-            <View style={styles.focusPanel}>
-              <Text style={styles.focusLabel}>Today&apos;s gentle focus</Text>
-              <Text style={styles.focusText}>{getFocusMessage()}</Text>
-            </View>
-
-            <View style={styles.heroActions}>
-              <Pressable
-                onPress={() => router.navigate('/(main)/journal')}
-                style={[styles.heroActionButton, styles.heroActionSecondary]}
-              >
-                <Text style={styles.heroActionSecondaryText}>Open journal</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.sectionBlock}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Check in</Text>
-              <Text style={styles.sectionCaption}>
-                {checkInComplete ? 'Nice work. You showed up for yourself.' : 'One quick pulse for today.'}
-              </Text>
-            </View>
-            <DailyCheckInCard onCheckInComplete={() => setCheckInComplete(true)} />
-          </View>
-
-          <View style={styles.sectionBlock}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Choose your next step</Text>
-              <Text style={styles.sectionCaption}>
-                Go straight into the support you need instead of scrolling through everything.
-              </Text>
-            </View>
+            <Text style={styles.sectionCaption}>Choose how you want to connect today.</Text>
 
             <View style={styles.primaryToolsRow}>
               <PrimaryToolCard
@@ -321,39 +412,16 @@ export default function HomeScreen() {
                 title="Voice"
               />
             </View>
+          </Animated.View> */}
 
-            <View style={styles.secondaryToolsGrid}>
-              <SecondaryToolCard
-                accentColor="#7E6BEF"
-                actionText="View trends"
-                icon="pulse-outline"
-                onPress={() => router.navigate('/(main)/mood-history')}
-                title="Mood history"
-              />
-              <SecondaryToolCard
-                accentColor="#E58A63"
-                actionText="Write freely"
-                icon="book-outline"
-                onPress={() => router.navigate('/(main)/journal')}
-                title="Journal"
-              />
-              <SecondaryToolCard
-                accentColor="#45A38A"
-                actionText="Take a pause"
-                icon="leaf-outline"
-                onPress={() => router.navigate('/(main)/breathing')}
-                title="Breathing"
-              />
-            </View>
-          </View>
-
-          <View style={styles.sectionBlock}>
-            <View style={styles.sectionHeader}>
+          {/* ── QUICK PICKS ── */}
+          <Animated.View entering={FadeInDown.duration(400).delay(260)} style={styles.sectionBlock}>
+            <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Quick picks</Text>
-              <Text style={styles.sectionCaption}>
-                Short paths back into the moments that usually help.
-              </Text>
             </View>
+            <Text style={styles.sectionCaption}>
+              Short paths back into the moments that usually help.
+            </Text>
 
             <View style={styles.recentCard}>
               <LinearGradient
@@ -363,7 +431,6 @@ export default function HomeScreen() {
                 start={{ x: 0.5, y: 0 }}
                 style={styles.recentCardGlow}
               />
-
               <View style={styles.quickPicksGrid}>
                 {RECENT_ACTIVITY_ITEMS.map((item) => (
                   <Pressable
@@ -391,26 +458,46 @@ export default function HomeScreen() {
                 ))}
               </View>
             </View>
-          </View>
+          </Animated.View>
+
+          {/* ── MOOD HISTORY CARD ── */}
+          <Animated.View entering={FadeInDown.duration(400).delay(300)}>
+            <Pressable
+              onPress={() => router.navigate('/(main)/mood-history')}
+              style={({ pressed }) => [styles.moodHistoryCard, pressed && { opacity: 0.92 }]}
+            >
+              <LinearGradient
+                colors={['#EDE9FE', '#FEF3C7']}
+                end={{ x: 1, y: 0 }}
+                start={{ x: 0, y: 0 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <View style={styles.moodHistoryContent}>
+                <View>
+                  <Text style={styles.moodHistoryTitle}>Your mood pattern</Text>
+                  <Text style={styles.moodHistorySubtitle}>See your weekly rhythm → Last 7 days</Text>
+                </View>
+                <View style={styles.moodHistoryIcon}>
+                  <Ionicons name="analytics-outline" size={28} color="#7C3AED" />
+                </View>
+              </View>
+            </Pressable>
+          </Animated.View>
+
         </AnimatedScrollView>
       </FadingScrollWrapper>
 
+      {/* ── ZOOM AVATAR MODAL ── */}
       <Modal animationType="none" transparent visible={showZoomModal}>
         <TouchableWithoutFeedback onPress={closeZoomModal}>
           <View style={styles.zoomModalContainer}>
-            <Animated.View
-              style={[StyleSheet.absoluteFill, styles.blurBackdrop, backdropAnimatedStyle]}
-            >
+            <Animated.View style={[StyleSheet.absoluteFill, styles.blurBackdrop, backdropAnimatedStyle]}>
               <BlurView intensity={80} style={StyleSheet.absoluteFill} tint="dark" />
             </Animated.View>
-
-            <Animated.View
-              style={[styles.zoomedAvatarContainer, zoomedAvatarAnimatedStyle]}
-            >
+            <Animated.View style={[styles.zoomedAvatarContainer, zoomedAvatarAnimatedStyle]}>
               {avatar.type === 'emoji' && avatar.value ? (
                 <Text style={styles.zoomedAvatarEmoji}>{avatar.value}</Text>
               ) : null}
-
               {avatar.type === 'image' && avatar.value ? (
                 <Image source={{ uri: avatar.value }} style={styles.zoomedAvatarImage} />
               ) : null}
@@ -427,206 +514,277 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  header: {
-    marginBottom: 8,
+  scrollContent: {
+    gap: 20,
+    paddingHorizontal: 16,
   },
 
-  headerContent: {
+  // ── HEADER ──
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 2,
-    paddingVertical: 8,
+  },
+
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
 
   logoText: {
-    color: LIGHT_THEME.textPrimary,
     fontFamily: 'Playwrite',
-    fontSize: 32,
+    fontSize: 26,
+    color: '#1A1A1A',
+    lineHeight: 32,
+    marginBottom: 10,
   },
 
-  profileButton: {
-    padding: 4,
+  headerSubtitle: {
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 1,
   },
 
   profileAvatar: {
     alignItems: 'center',
     backgroundColor: LIGHT_THEME.surface,
     borderColor: 'rgba(232, 230, 240, 0.95)',
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 2,
-    height: 40,
+    height: 48,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 40,
+    width: 48,
     ...CARD_SHADOW_LIGHT,
   },
 
   avatarEmoji: {
-    fontSize: 22,
+    fontSize: 24,
   },
 
   avatarImage: {
-    borderRadius: 20,
-    height: 40,
-    width: 40,
+    borderRadius: 24,
+    height: 48,
+    width: 48,
   },
 
-  scrollContent: {
-    gap: 16,
-    paddingHorizontal: 14,
+  greetingText: {
+    color: LIGHT_THEME.textPrimary,
+    fontFamily: 'Outfit-SemiBold',
+    fontSize: 18,
   },
 
-  heroCard: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-    borderRadius: 28,
-    borderWidth: 0,
-    gap: 12,
-    overflow: 'hidden',
-    padding: 14,
-    position: 'relative',
+  subGreeting: {
+    color: LIGHT_THEME.textMuted,
+    fontFamily: 'Outfit-Regular',
+    fontSize: 13,
+    marginTop: 1,
   },
 
-  heroCardGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 28,
-    opacity: 1,
+  settingsButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(232, 230, 240, 0.9)',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+    ...CARD_SHADOW_LIGHT,
   },
 
-  heroTopRow: {
-    alignItems: 'flex-start',
+  // ── SECTION ──
+  sectionBlock: {
+    gap: 10,
+  },
+
+  sectionHeaderRow: {
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-  },
-
-  heroTextBlock: {
-    flex: 1,
-    gap: 6,
-  },
-
-  eyebrow: {
-    color: LIGHT_THEME.textMuted,
-    fontFamily: 'Outfit-Medium',
-    fontSize: 12,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-
-  heroTitle: {
-    color: LIGHT_THEME.textPrimary,
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 28,
-  },
-
-  heroSubtitle: {
-    color: LIGHT_THEME.textSecondary,
-    fontFamily: 'Outfit-Regular',
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: '92%',
-  },
-
-  heroPill: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.82)',
-    borderColor: 'rgba(232, 230, 240, 0.9)',
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-
-  heroPillText: {
-    color: LIGHT_THEME.textPrimary,
-    fontFamily: 'Outfit-Medium',
-    fontSize: 12,
-  },
-
-  focusPanel: {
-    backgroundColor: 'rgba(248, 246, 255, 0.95)',
-    borderRadius: 22,
-    gap: 6,
-    padding: 16,
-  },
-
-  focusLabel: {
-    color: LIGHT_THEME.textMuted,
-    fontFamily: 'Outfit-Medium',
-    fontSize: 12,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-
-  focusText: {
-    color: LIGHT_THEME.textPrimary,
-    fontFamily: 'Outfit-Regular',
-    fontSize: 16,
-    lineHeight: 23,
-  },
-
-  heroActions: {
-    flexDirection: 'row',
-  },
-
-  heroActionButton: {
-    alignItems: 'center',
-    borderRadius: 18,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 22,
-  },
-
-  heroActionSecondary: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderColor: 'rgba(232, 230, 240, 0.9)',
-    borderWidth: 1,
-  },
-
-  heroActionSecondaryText: {
-    color: LIGHT_THEME.textPrimary,
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 15,
-  },
-
-  sectionBlock: {
-    gap: 8,
-  },
-
-  sectionHeader: {
-    gap: 4,
-    paddingHorizontal: 2,
   },
 
   sectionTitle: {
     color: LIGHT_THEME.textPrimary,
     fontFamily: 'Outfit-SemiBold',
-    fontSize: 20,
+    fontSize: 18,
   },
 
   sectionCaption: {
     color: LIGHT_THEME.textSecondary,
     fontFamily: 'Outfit-Regular',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: -4,
   },
 
+  seeAllText: {
+    color: '#7C3AED',
+    fontFamily: 'Outfit-Medium',
+    fontSize: 13,
+  },
+
+  doneBadge: {
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+
+  doneBadgeText: {
+    color: '#16A34A',
+    fontFamily: 'Outfit-SemiBold',
+    fontSize: 12,
+  },
+
+  // ── ACTIVITIES ──
+  activityList: {
+    paddingTop: 4,
+  },
+
+  activityCardWrap: {
+    position: 'relative',
+  },
+
+  activityCardOverlap: {
+    marginTop: -50,
+  },
+
+  activityCard: {
+    alignItems: 'stretch',
+    borderRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    padding: 14,
+    ...CARD_SHADOW_LIGHT,
+  },
+
+  activityCardActive: {
+    borderRadius: 28,
+    minHeight: 182,
+    paddingBottom: 16,
+  },
+
+  activityCardInactive: {
+    borderRadius: 24,
+    minHeight: 94,
+    paddingVertical: 12,
+  },
+
+  activityCardPressed: {
+    opacity: 0.95,
+  },
+
+  // LEFT side — text only, no icon
+  activityLeft: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingRight: 12,
+  },
+
+  activityTextBlock: {
+    gap: 3,
+  },
+
+  activityLabel: {
+    color: LIGHT_THEME.textPrimary,
+    fontFamily: 'Outfit-SemiBold',
+    fontSize: 16,
+  },
+
+  activitySublabel: {
+    color: 'rgba(36, 28, 68, 0.7)',
+    fontFamily: 'Outfit-Regular',
+    fontSize: 12,
+  },
+
+  // Meta stacked vertically (column direction)
+  activityMeta: {
+    flexDirection: 'column',
+    gap: 6,
+    marginTop: 14,
+  },
+
+  activityMetaItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+
+  activityMetaText: {
+    color: '#54468E',
+    fontFamily: 'Outfit-Medium',
+    fontSize: 12,
+  },
+
+  // RIGHT side — artwork block, play button lives inside it
+  activityArtwork: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative', // required so play button can be absolute inside
+  },
+
+  activityArtworkActive: {
+    alignSelf: 'flex-end',
+    borderRadius: 26,
+    height: 132,
+    width: 132,
+  },
+
+  activityArtworkInactive: {
+    alignSelf: 'center',
+    borderRadius: 20,
+    height: 68,
+    width: 88,
+  },
+
+  // Play button — absolutely positioned at top-right of artwork block
+  activityPlayButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 22,
+    borderColor: 'rgba(79, 59, 155, 0.14)',
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+
+  activityPlayButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    height: 38,
+    width: 38,
+  },
+
+  activityPlayButtonPressed: {
+    opacity: 0.86,
+  },
+
+  // ── TOOLS ──
   primaryToolsRow: {
     flexDirection: 'row',
     gap: 12,
   },
 
-  secondaryToolsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 12,
-  },
-
+  // ── QUICK PICKS ──
   recentCard: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
@@ -695,6 +853,43 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
 
+  // ── MOOD HISTORY CARD ──
+  moodHistoryCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    ...CARD_SHADOW_LIGHT,
+  },
+
+  moodHistoryContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+  },
+
+  moodHistoryTitle: {
+    color: LIGHT_THEME.textPrimary,
+    fontFamily: 'Outfit-SemiBold',
+    fontSize: 17,
+  },
+
+  moodHistorySubtitle: {
+    color: LIGHT_THEME.textSecondary,
+    fontFamily: 'Outfit-Regular',
+    fontSize: 13,
+    marginTop: 3,
+  },
+
+  moodHistoryIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 16,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+
+  // ── ZOOM MODAL ──
   zoomModalContainer: {
     alignItems: 'center',
     flex: 1,

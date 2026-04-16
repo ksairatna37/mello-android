@@ -13,7 +13,11 @@
       "env": {
         "EXPO_PUBLIC_HUME_API_KEY": "lNacYQhyNIzEPdIgUb6KkgSUex1VUkYjKnPQkYA3jExLudOg",
         "EXPO_PUBLIC_HUME_CONFIG_ID": "3cdbbe91-bbf6-4e38-93b2-6166b113498a",
-        "EXPO_PUBLIC_LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token"
+        "EXPO_PUBLIC_LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token",
+        "EXPO_PUBLIC_AWS_BEDROCK_REGION": "us-east-1",
+        "EXPO_PUBLIC_AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0",
+        "EXPO_PUBLIC_AWS_BEARER_TOKEN_BEDROCK": "ABSKQmVkcm9ja0FQSUtleS1pdDE2LWF0LTA0OTU1OTUzNjk2MDozVktORCtFRFRMZ25OUlQ0b2pKRW1yQklPaVR0OEVGOHAzQkM5TUd5cXVqNDNCOWhiWUZzOUlMWGpSUT0="
+
       }
     },
     "production": {

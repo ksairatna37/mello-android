@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentStep } from '@/utils/onboardingStorage';
 
 // DEV MODE: Set to true to skip onboarding and go directly to Get Rolling
-const DEV_SKIP_TO_GET_ROLLING = true;
+const DEV_SKIP_TO_GET_ROLLING = false;
 
 // INVESTOR DEMO: Redirect to voice instead of chat (chat is disabled)
 const DEMO_REDIRECT_TO_VOICE = false;
@@ -70,13 +70,17 @@ export default function Index() {
             // Resume in get-rolling flow
             const screenName = savedStep.replace('get-rolling/', '');
             setDestination(`/(get-rolling)/${screenName}`);
+          } else if (savedStep === 'name-input') {
+            // 'name-input' was the old onboarding entry point — now questions come first.
+            // Treat it as a fresh start through the new flow.
+            setDestination('/(onboarding-new)/personalize-intro');
           } else {
             // Resume in onboarding flow
             setDestination(`/(onboarding-new)/${savedStep}`);
           }
         } else {
           console.log('>>> Index: Starting onboarding from beginning');
-          setDestination('/(onboarding-new)/name-input');
+          setDestination('/(onboarding-new)/personalize-intro');
         }
       }
     };

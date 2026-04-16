@@ -49,6 +49,10 @@ export async function loadChat(
   userId: string,
   accessToken: string
 ): Promise<StoredMessage[] | null> {
+  console.log('=== LOAD CHAT ===');
+  console.log('>>> userId:', userId);
+  console.log('>>> hasToken:', !!accessToken);
+
   try {
     const response = await authPost<ChatPayload, LoadChatRequest>(
       ENDPOINTS.LOAD_CHAT,
@@ -56,17 +60,23 @@ export async function loadChat(
       accessToken
     );
 
+    console.log('>>> loadChat response:', JSON.stringify(response, null, 2));
+
     if (response.error || !response.data) {
+      console.log('>>> loadChat error or no data:', response.error);
       return null;
     }
 
     const messages = response.data?.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
+      console.log('>>> loadChat: no messages found');
       return null;
     }
 
+    console.log('>>> loadChat: found', messages.length, 'messages');
     return messages;
-  } catch {
+  } catch (err) {
+    console.error('>>> loadChat exception:', err);
     return null;
   }
 }
@@ -85,8 +95,14 @@ export async function saveChat(
   accessToken: string,
   messages: StoredMessage[]
 ): Promise<void> {
+  console.log('=== SAVE CHAT ===');
+  console.log('>>> userId:', userId);
+  console.log('>>> hasToken:', !!accessToken);
+  console.log('>>> messages count:', messages.length);
+  console.log('>>> messages:', JSON.stringify(messages.slice(0, 3), null, 2), '...');
+
   try {
-    await authPost<unknown, SaveChatRequest>(
+    const response = await authPost<unknown, SaveChatRequest>(
       ENDPOINTS.UPDATE_CHAT,
       {
         user_id: userId,
@@ -94,7 +110,9 @@ export async function saveChat(
       },
       accessToken
     );
-  } catch {
+    console.log('>>> saveChat response:', JSON.stringify(response, null, 2));
+  } catch (err) {
+    console.error('>>> saveChat exception:', err);
     // Persistence failure is non-fatal — the conversation continues locally
   }
 }

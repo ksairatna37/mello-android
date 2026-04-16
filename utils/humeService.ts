@@ -39,7 +39,8 @@ export interface HumeCallbacks {
   onAudioOutput: (base64Audio: string) => void;
   onUserInterruption: () => void;
   onAssistantEnd: () => void;
-  onConnected: (chatId: string) => void;
+  // chatId: per-call ID; chatGroupId: session-continuity group ID (for resume)
+  onConnected: (chatId: string, chatGroupId: string) => void;
   onDisconnected: () => void;
   onError: (error: string) => void;
 }
@@ -79,17 +80,26 @@ export class HumeEVIService {
   private callbacks: HumeCallbacks;
   private socket: WebSocket | null = null;
   private _isConnected = false;
+  // Pass this to resume the same Hume conversation thread across calls
+  private resumedChatGroupId: string | null;
+  // Variables sent in the very first session_settings (must include all
+  // variables declared in the EVI config to avoid "no values specified" errors)
+  private initialVariables: Record<string, string>;
 
   constructor(
     apiKey: string,
     configId: string,
     callbacks: HumeCallbacks,
     sampleRate?: number,
+    resumedChatGroupId?: string | null,
+    initialVariables?: Record<string, string>,
   ) {
     this.apiKey = apiKey;
     this.configId = configId;
     this.sampleRate = sampleRate ?? DEFAULT_SAMPLE_RATE;
     this.callbacks = callbacks;
+    this.resumedChatGroupId = resumedChatGroupId ?? null;
+    this.initialVariables = initialVariables ?? {};
   }
 
   get isConnected(): boolean {
@@ -100,7 +110,14 @@ export class HumeEVIService {
     return new Promise((resolve, reject) => {
       try {
         // Build WebSocket URL with auth params
-        const url = `${HUME_WS_URL}?config_id=${this.configId}&api_key=${this.apiKey}`;
+        // Append resumed_chat_group_id to continue the same Hume memory thread
+        const resumeParam = this.resumedChatGroupId
+          ? `&resumed_chat_group_id=${encodeURIComponent(this.resumedChatGroupId)}`
+          : '';
+        const url = `${HUME_WS_URL}?config_id=${this.configId}&api_key=${this.apiKey}${resumeParam}`;
+        if (this.resumedChatGroupId) {
+          console.log('[HumeService] Resuming chat group:', this.resumedChatGroupId.substring(0, 20) + '...');
+        }
         console.log('[HumeService] Connecting to:', HUME_WS_URL, 'configId:', this.configId);
         const ws = new WebSocket(url);
 
@@ -109,8 +126,10 @@ export class HumeEVIService {
           this._isConnected = true;
           this.socket = ws;
 
-          // Send session settings for linear PCM audio
-          const settings = {
+          // Send ONE combined session_settings containing both audio format AND
+          // all config variables.  Splitting into two messages causes Hume to fire
+          // "no values specified" on the first message before the second arrives.
+          const settings: Record<string, any> = {
             type: 'session_settings',
             audio: {
               encoding: 'linear16',
@@ -118,6 +137,9 @@ export class HumeEVIService {
               channels: 1,
             },
           };
+          if (Object.keys(this.initialVariables).length > 0) {
+            settings.variables = this.initialVariables;
+          }
           console.log('[HumeService] Sending session_settings:', JSON.stringify(settings));
           this.sendJSON(settings);
 
@@ -212,7 +234,9 @@ export class HumeEVIService {
     switch (msg.type) {
       case 'chat_metadata': {
         const chatId = msg.chat_id || '';
-        this.callbacks.onConnected(chatId);
+        const chatGroupId = msg.chat_group_id || '';
+        console.log('[HumeService] chat_metadata — chatId:', chatId.substring(0, 20), 'chatGroupId:', chatGroupId.substring(0, 20));
+        this.callbacks.onConnected(chatId, chatGroupId);
         break;
       }
 

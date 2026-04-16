@@ -50,11 +50,20 @@ import {
   Pressable,
   StyleSheet,
   Modal,
-  Platform,
+  Dimensions,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export { RecordingBar } from './Recordingbar';
 
@@ -85,41 +94,98 @@ interface OnboardingModalProps {
 
 function OnboardingModal({ visible, onContinue, onClose }: OnboardingModalProps) {
   const insets = useSafeAreaInsets();
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  const translateY      = useSharedValue(SCREEN_HEIGHT);
+  const backdropOpacity = useSharedValue(0);
+  const scale           = useSharedValue(0.96);
+
+  const hideModal = useCallback(() => {
+    setIsVisible(false);
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (visible) {
+      setIsVisible(true);
+      backdropOpacity.value = withTiming(1, { duration: 350 });
+      translateY.value = withSpring(0, { damping: 50, stiffness: 150, mass: 0.5 });
+      scale.value      = withSpring(1, { damping: 50, stiffness: 150, mass: 0.8 });
+    } else if (isVisible) {
+      backdropOpacity.value = withTiming(0, { duration: 300 });
+      scale.value           = withTiming(0.96, { duration: 300 });
+      translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+        if (finished) runOnJS(hideModal)();
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  const sheetStyle    = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+
+  const handleClose = useCallback(() => {
+    backdropOpacity.value = withTiming(0, { duration: 300 });
+    scale.value           = withTiming(0.96, { duration: 300 });
+    translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+      if (finished) runOnJS(hideModal)();
+    });
+  }, [hideModal]);
+
+  if (!isVisible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, 24) + 16 }]}>
-          <Pressable style={styles.modalClose} onPress={onClose} hitSlop={8}>
-            <Ionicons name="close" size={24} color="#1A1A1A" />
+    <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent onRequestClose={handleClose}>
+      <View style={styles.modalContainer}>
+        {/* Backdrop */}
+        <Animated.View style={[styles.backdrop, backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+
+        {/* Sheet */}
+        <Animated.View style={[styles.sheet, sheetStyle, { bottom: 16, paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+          {/* Handle bar */}
+          <View style={styles.handleBar} />
+
+          {/* Close button */}
+          <Pressable style={styles.modalClose} onPress={handleClose} hitSlop={8}>
+            <Ionicons name="close" size={22} color="#1A1A1A" />
           </Pressable>
+
+          {/* Mic icon centered in circle */}
           <View style={styles.modalIconWrap}>
-            <View style={styles.modalIconBlob} />
-            <Ionicons name="mic-outline" size={56} color="#1A1A1A" style={styles.modalIcon} />
+            <View style={styles.modalIconCircle}>
+              <Ionicons name="mic-outline" size={44} color="#FFFFFF" />
+            </View>
           </View>
-          <Text style={styles.modalTitle}>Send messages to Mello{'\n'}using your voice.</Text>
+
+          {/* Title — "mello" in Playwrite */}
+          <Text style={styles.modalTitle}>
+            {'Send messages to '}
+            <Text style={styles.modalTitleMello}>mello</Text>
+            {'\nusing your voice.'}
+          </Text>
+
+          {/* Feature list */}
           <View style={styles.featureList}>
-            <FeatureRow icon="globe-outline"  text="Speak in any language" />
-            <FeatureRow icon="time-outline"   text="Speak for as long as you need" />
-            <FeatureRow icon="flash-outline"  text="Chat more quickly and naturally" />
+            <FeatureRow icon="globe-outline" text="Speak in any language" />
+            <FeatureRow icon="time-outline"  text="Speak for as long as you need" />
+            <FeatureRow icon="flash-outline" text="Chat more quickly and naturally" />
           </View>
+
+          {/* Language row */}
           <View style={styles.languageRow}>
             <Text style={styles.languageLabel}>Speech Input Language</Text>
-            <Text style={styles.languageValue}>
-              {Platform.OS === 'ios'
-                ? 'System language (set in iOS Settings)'
-                : 'Device default'}
-            </Text>
+            <Text style={styles.languageValue}>English</Text>
           </View>
+
+          {/* Continue */}
           <Pressable style={styles.continueBtn} onPress={onContinue}>
             <Text style={styles.continueBtnText}>Continue</Text>
           </Pressable>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -526,7 +592,7 @@ export function useVoiceMic(onTranscript: (text: string) => void) {
 export const MicButton = memo(function MicButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable style={styles.micBtn} onPress={onPress} hitSlop={8}>
-      <Ionicons name="mic-outline" size={22} color="rgba(0,0,0,0.45)" />
+      <Ionicons name="mic-outline" size={28} color="#111111" />
     </Pressable>
   );
 });
@@ -539,22 +605,42 @@ export { OnboardingModal };
 
 const styles = StyleSheet.create({
   micBtn: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalOverlay: {
+  // ── Bottom sheet ──────────────────────────────────────────────────────────
+  modalContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  modalCard: {
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 998,
+  },
+  sheet: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 999,
+    borderRadius: 40,
     backgroundColor: '#F5F3EE',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 32,
     paddingHorizontal: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
   },
   modalClose: {
     position: 'absolute',
@@ -567,30 +653,29 @@ const styles = StyleSheet.create({
   },
   modalIconWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 12,
     marginBottom: 24,
-    height: 120,
   },
-  modalIconBlob: {
-    position: 'absolute',
-    width: 80,
-    height: 70,
-    borderRadius: 40,
-    backgroundColor: '#C8A882',
-    top: 0,
-    alignSelf: 'center',
-  },
-  modalIcon: {
-    zIndex: 1,
-    marginTop: 20,
+  modalIconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#b9a6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
-    fontFamily: 'Outfit-SemiBold',
+    fontFamily: 'Outfit-Regular',
     fontSize: 22,
     color: '#1A1A1A',
     textAlign: 'center',
-    lineHeight: 30,
+    lineHeight: 32,
     marginBottom: 28,
+  },
+  modalTitleMello: {
+    fontFamily: 'Playwrite',
+    fontSize: 22,
+    color: '#1A1A1A',
   },
   featureList: {
     gap: 16,
@@ -625,7 +710,7 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
   continueBtn: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#b9a6ff',
     borderRadius: 30,
     paddingVertical: 16,
     alignItems: 'center',
@@ -633,6 +718,6 @@ const styles = StyleSheet.create({
   continueBtnText: {
     fontFamily: 'Outfit-SemiBold',
     fontSize: 16,
-    color: '#fff',
+    color: '#ffffff',
   },
 });

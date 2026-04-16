@@ -298,11 +298,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // New user - update profile and go to onboarding
         console.log('>>> New user, updating profile and going to onboarding');
         await updateProfileData(currentUser);
-        router.replace('/(onboarding-new)/name-input' as any);
+        router.replace('/(onboarding-new)/personalize-intro' as any);
       } else if (status === 0) {
         // Existing user, incomplete onboarding (first_login: false)
         console.log('>>> Existing user with incomplete onboarding');
-        router.replace('/(onboarding-new)/name-input' as any);
+        router.replace('/(onboarding-new)/personalize-intro' as any);
       } else {
         // Existing user, completed onboarding (first_login: true)
         console.log('>>> Existing user with complete onboarding, going to main');
@@ -311,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('>>> Error in handlePostAuthNavigation:', error);
       // Fallback to onboarding on error
-      router.replace('/(onboarding-new)/name-input' as any);
+      router.replace('/(onboarding-new)/personalize-intro' as any);
     }
   }, [checkUserStatus, updateProfileData, router]);
 
@@ -514,7 +514,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Navigate to onboarding (new user always goes to onboarding)
       await new Promise(resolve => setTimeout(resolve, 300));
-      router.replace('/(onboarding-new)/name-input' as any);
+      router.replace('/(onboarding-new)/personalize-intro' as any);
 
       return { success: true };
     } catch (error: any) {
@@ -604,7 +604,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace(DEFAULT_MAIN_ROUTE as any);
       } else {
         // New or incomplete → onboarding
-        router.replace('/(onboarding-new)/name-input' as any);
+        router.replace('/(onboarding-new)/personalize-intro' as any);
       }
 
       return { success: true };
@@ -792,6 +792,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Handle post-auth navigation on sign in
           if (event === 'SIGNED_IN') {
+            // Save session to AsyncStorage (critical for Google sign-in)
+            // This ensures getAccessToken() works for onboarding sync
+            const provider = currentSession.user.app_metadata?.provider as AuthProvider || 'google';
+            console.log('>>> Saving session to storage for provider:', provider);
+            await saveSession(currentSession.user.email!, provider, {
+              userId: currentSession.user.id,
+              accessToken: currentSession.access_token,
+              refreshToken: currentSession.refresh_token,
+            });
+
             console.log('>>> SIGNED_IN event - calling handlePostAuthNavigation');
             await handlePostAuthNavigation(currentSession.user);
           }

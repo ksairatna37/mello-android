@@ -40,6 +40,14 @@ export interface OnboardingData {
   notificationsEnabled?: boolean;
   microphoneEnabled?: boolean;
 
+  // Onboarding Questions (10-question revamp flow)
+  moodWeather?: string;        // Q1: weather metaphor for current mood
+  spiritAnimal?: string;       // Q2: coping style / spirit animal
+  lateNightMood?: string;      // Q3: what's going on at 2am
+  textToSelf?: string;         // Q4: what you'd text yourself 6 months ago (preset option)
+  textToSelfCustom?: string;   // Q4: custom written answer
+  emotionalBattery?: string;   // Q5: emotional battery level (0-100)
+
   // Get Rolling flow data
   ageRange?: string;           // Age selection (under-18, 18-24, 25-34, etc.)
   avatarReason?: string;       // Why they picked their avatar
