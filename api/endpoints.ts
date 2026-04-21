@@ -17,6 +17,7 @@ export const ENDPOINTS = {
   AUTH_CONFIRM_RESET: '/rest/v1/auth/confirm-reset',
   AUTH_SET_PASSWORD: '/rest/v1/auth/set-password',
   AUTH_DELETE_USER: '/rest/v1/auth/user',
+  AUTH_LOGIN_GOOGLE: '/rest/v1/auth/login-using-google',
 
   // Onboarding
   USER_ONBOARDING: '/rest/v1/user_onboarding',
@@ -34,6 +35,7 @@ export const ENDPOINTS = {
 
   // Profiles
   PROFILES: '/rest/v1/profiles',
+  PROFILES_UPDATE: (id: string) => `/rest/v1/profiles?id=${id}`,
 } as const;
 
 // Build full URL

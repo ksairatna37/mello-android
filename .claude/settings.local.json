@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws)",
+      "Bash(curl *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('user_id:', d.get\\('user_id'\\)\\); print\\('access_token:', d.get\\('access_token',''\\)[:40]+'...' if d.get\\('access_token'\\) else 'NONE'\\)\")",
+      "Bash(npx expo *)"
+    ]
+  }
+}

@@ -43,11 +43,28 @@ import {
   saveSession,
   getSession,
   clearSession,
+  getAccessToken,
   type AuthProvider,
 } from '@/services/auth';
+import { authPatch, authGet, post } from '@/api/client';
+import { ENDPOINTS } from '@/api/endpoints';
 
 // Onboarding storage (for clearing on logout)
-import { clearOnboardingData } from '@/utils/onboardingStorage';
+import { clearOnboardingData, getOnboardingData } from '@/utils/onboardingStorage';
+
+/**
+ * Returns true if the user already answered onboarding questions locally
+ * (i.e. they went through the questions flow before creating an account).
+ * Used to decide where to route after auth completes.
+ */
+async function hasLocalOnboardingAnswers(): Promise<boolean> {
+  try {
+    const data = await getOnboardingData();
+    return !!(data.moodWeather);
+  } catch {
+    return false;
+  }
+}
 
 // Google OAuth Client IDs
 // Get these from Google Cloud Console -> Credentials -> OAuth 2.0 Client IDs
@@ -91,6 +108,7 @@ interface Profile {
   avatar_url?: string | null;
   email_id?: string | null;
   first_login?: boolean | null;
+  onboarding_completed?: boolean | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -158,162 +176,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   /**
-   * Fetch user profile from profiles table
-   * PGRST116 = no rows found (expected for new users)
+   * Fetch profile from backend API by user ID
    */
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string, accessToken?: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle(); // Returns null instead of error when no rows
+      const token = accessToken || await getAccessToken();
+      if (!token) return null;
 
-      if (error) {
-        console.error('Error fetching profile:', error);
+      const { data, error } = await authGet<Profile>(
+        `${ENDPOINTS.PROFILES}?id=${userId}`,
+        token
+      );
+
+      if (error || !data) {
+        console.log('>>> No profile found for userId:', userId);
         return null;
       }
 
-      if (data) {
-        setProfile(data as Profile);
-        return data as Profile;
-      }
-
-      // No profile yet (new user) - this is expected
-      return null;
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      return null;
-    }
-  }, []);
-
-  /**
-   * Fetch user profile by email (for email auth users)
-   */
-  const fetchProfileByEmail = useCallback(async (email: string) => {
-    console.log('>>> fetchProfileByEmail called for:', email);
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email_id', email.trim())
-        .maybeSingle();
-
-      if (error) {
-        console.error('>>> Error fetching profile by email:', error.message, error.code, JSON.stringify(error));
-        return null;
-      }
-
-      if (data) {
-        console.log('>>> Found profile for email user:', data.email_id, 'first_login:', data.first_login);
-        setProfile(data as Profile);
-        return data as Profile;
-      }
-
-      // No profile yet (new user)
-      console.log('>>> No profile found for email:', email);
-      return null;
+      setProfile(data);
+      return data;
     } catch (err: any) {
-      console.error('>>> Exception in fetchProfileByEmail:', err?.message || err);
+      console.error('>>> Error fetching profile:', err?.message || err);
       return null;
     }
   }, []);
 
   /**
-   * Check user status in profiles table
-   * Returns: -1 (new), 0 (incomplete onboarding), 1 (complete)
+   * Fetch profile from backend API (alias using stored session — for email users)
    */
-  const checkUserStatus = useCallback(async (email: string): Promise<number> => {
+  const fetchProfileByEmail = useCallback(async (_email: string) => {
+    const storedSession = await getSession();
+    if (!storedSession?.userId || !storedSession?.accessToken) return null;
+    return fetchProfile(storedSession.userId, storedSession.accessToken);
+  }, [fetchProfile]);
+
+  /**
+   * Check user status via backend API
+   * Returns: -1 (not found), 0 (incomplete onboarding), 1 (complete)
+   */
+  const checkUserStatus = useCallback(async (userId: string, accessToken: string): Promise<number> => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email_id', email.trim())
-        .maybeSingle();
+      const { data, error } = await authGet<Profile>(
+        `${ENDPOINTS.PROFILES}?id=${userId}`,
+        accessToken
+      );
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return -1; // Not found
-        }
-        console.error('Error checking user status:', error);
-        return -1;
-      }
-
-      if (data) {
-        return data.first_login ? 1 : 0;
-      }
-
-      return -1; // Not found
-    } catch (error) {
-      console.error('Error checking user status:', error);
+      if (error || !data) return -1;
+      console.log('>>> [checkUserStatus] profile.onboarding_completed:', data.onboarding_completed, '| userId:', userId);
+      return data.onboarding_completed ? 1 : 0;
+    } catch {
       return -1;
     }
   }, []);
 
   /**
-   * Create or update profile data for new users (UPSERT)
-   */
-  const updateProfileData = useCallback(async (user: User) => {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id, // Required for upsert to match existing row
-          email_id: user.email,
-          first_login: false, // Will become true after onboarding
-          username: user.user_metadata?.full_name || user.user_metadata?.name || null,
-          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        }, {
-          onConflict: 'id', // If id exists, update; otherwise insert
-        });
-
-      if (error) {
-        console.error('Error upserting profile:', error);
-      }
-    } catch (error) {
-      console.error('Error updating profile:', error);
-    }
-  }, []);
-
-  /**
    * Handle navigation based on user status
-   * Status: -1 (new user), 0 (incomplete onboarding), 1 (complete)
+   * Status: -1 (not found), 0 (incomplete onboarding), 1 (complete)
    */
-  const handlePostAuthNavigation = useCallback(async (currentUser: User) => {
+  const handlePostAuthNavigation = useCallback(async (currentUser: User, accessToken: string) => {
     console.log('>>> handlePostAuthNavigation called for:', currentUser.email);
 
-    if (!currentUser.email) {
-      console.error('>>> User has no email, cannot navigate');
-      return;
-    }
-
     try {
-      const status = await checkUserStatus(currentUser.email);
-      console.log('>>> User status:', status, 'for email:', currentUser.email);
+      const status = await checkUserStatus(currentUser.id, accessToken);
+      console.log('>>> User status:', status, 'for:', currentUser.email);
 
-      // Small delay to ensure auth state is fully propagated
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      if (status === -1) {
-        // New user - update profile and go to onboarding
-        console.log('>>> New user, updating profile and going to onboarding');
-        await updateProfileData(currentUser);
-        router.replace('/(onboarding-new)/personalize-intro' as any);
-      } else if (status === 0) {
-        // Existing user, incomplete onboarding (first_login: false)
-        console.log('>>> Existing user with incomplete onboarding');
-        router.replace('/(onboarding-new)/personalize-intro' as any);
-      } else {
-        // Existing user, completed onboarding (first_login: true)
-        console.log('>>> Existing user with complete onboarding, going to main');
+      if (status === 1) {
+        console.log('>>> Completed onboarding, going to main');
         router.replace(DEFAULT_MAIN_ROUTE as any);
+      } else {
+        // Check if user already filled onboarding questions locally (pre-auth flow)
+        const hasLocalData = await hasLocalOnboardingAnswers();
+        console.log('>>> Has local onboarding data:', hasLocalData);
+        if (hasLocalData) {
+          console.log('>>> Local answers found — going to welcome-aboard to sync');
+          router.replace('/(onboarding-new)/welcome-aboard' as any);
+        } else {
+          console.log('>>> No local data — starting onboarding from beginning');
+          router.replace('/(onboarding-new)/credibility' as any);
+        }
       }
     } catch (error) {
       console.error('>>> Error in handlePostAuthNavigation:', error);
-      // Fallback to onboarding on error
-      router.replace('/(onboarding-new)/personalize-intro' as any);
+      router.replace('/(onboarding-new)/credibility' as any);
     }
-  }, [checkUserStatus, updateProfileData, router]);
+  }, [checkUserStatus, router]);
 
   /**
    * Sign in with Native Google Sign-In (in-app popup)
@@ -512,9 +460,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmailUser({ email: emailToSave, userId, provider: 'email' });
       setAuthProvider('email');
 
-      // Navigate to onboarding (new user always goes to onboarding)
+      // Route based on whether user already completed questions before signing up
+      const hasLocalData = await hasLocalOnboardingAnswers();
+      console.log('>>> [verifyOtp] Has local onboarding data:', hasLocalData);
       await new Promise(resolve => setTimeout(resolve, 300));
-      router.replace('/(onboarding-new)/personalize-intro' as any);
+      if (hasLocalData) {
+        router.replace('/(onboarding-new)/welcome-aboard' as any);
+      } else {
+        router.replace('/(onboarding-new)/credibility' as any);
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -594,17 +548,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthProvider('email');
 
       // Check user status for navigation
-      const status = await checkUserStatus(email);
+      const status = result.userId && result.accessToken
+        ? await checkUserStatus(result.userId, result.accessToken)
+        : -1;
       console.log('>>> User status:', status);
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
       if (status === 1) {
-        // Completed onboarding → main app
         router.replace(DEFAULT_MAIN_ROUTE as any);
       } else {
-        // New or incomplete → onboarding
-        router.replace('/(onboarding-new)/personalize-intro' as any);
+        const hasLocalData = await hasLocalOnboardingAnswers();
+        console.log('>>> [signInWithEmail] Has local onboarding data:', hasLocalData);
+        if (hasLocalData) {
+          router.replace('/(onboarding-new)/welcome-aboard' as any);
+        } else {
+          router.replace('/(onboarding-new)/credibility' as any);
+        }
       }
 
       return { success: true };
@@ -678,16 +638,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Refresh profile data
    */
   const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      await fetchProfile(user.id);
-    } else if (emailUser?.email) {
-      await fetchProfileByEmail(emailUser.email);
+    const token = await getAccessToken();
+    const storedSession = await getSession();
+    const profileId = user?.id || storedSession?.userId;
+    if (profileId && token) {
+      await fetchProfile(profileId, token);
     }
-  }, [user?.id, emailUser?.email, fetchProfile, fetchProfileByEmail]);
+  }, [user?.id, fetchProfile]);
 
   /**
-   * Mark onboarding as complete and navigate to main app
-   * Works for both Google (user.id) and email (emailUser.email) users
+   * Mark onboarding as complete and navigate to main app.
+   * Syncs onboarding data to user_onboarding table first, then PATCHes
+   * onboarding_completed=true on the profile. Works for both Google and email auth.
    */
   const completeOnboarding = useCallback(async () => {
     const currentEmail = user?.email || emailUser?.email;
@@ -700,45 +662,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('>>> Completing onboarding for:', user?.id || currentEmail);
 
     try {
-      let error;
-
-      if (user?.id) {
-        // Google user - update by id
-        const result = await supabase
-          .from('profiles')
-          .update({ first_login: true })
-          .eq('id', user.id);
-        error = result.error;
-      } else if (currentEmail) {
-        // Email user - update by email_id
-        const result = await supabase
-          .from('profiles')
-          .update({ first_login: true })
-          .eq('email_id', currentEmail);
-        error = result.error;
+      // Step 1: sync onboarding answers to user_onboarding table
+      const { syncOnboardingToBackend } = await import('@/services/onboarding/onboardingApi');
+      const syncResult = await syncOnboardingToBackend();
+      if (!syncResult.success) {
+        console.warn('>>> Onboarding sync failed (non-fatal):', syncResult.error);
       }
 
-      if (error) {
-        console.error('>>> Error updating profile:', error);
-        throw error;
+      // Step 2: PATCH profile — set onboarding_completed + username
+      const onboardingData = await getOnboardingData();
+      const firstName = onboardingData.firstName?.trim() || null;
+      const updatePayload: Record<string, unknown> = { onboarding_completed: true };
+      if (firstName) updatePayload.username = firstName;
+
+      const accessToken = await getAccessToken();
+      const storedSession = await getSession();
+      const profileId = user?.id || storedSession?.userId;
+
+      if (!profileId) {
+        console.error('>>> No profile ID to update');
+        throw new Error('No profile ID');
       }
 
-      console.log('>>> Onboarding marked complete');
+      console.log('>>> [completeOnboarding] PATCH → /rest/v1/profiles | profileId:', profileId, '| payload:', updatePayload);
+      const { error: patchError } = await authPatch(
+        ENDPOINTS.PROFILES_UPDATE(profileId),
+        updatePayload,
+        accessToken!
+      );
 
-      // Refresh profile to get updated data
-      if (user?.id) {
-        await fetchProfile(user.id);
-      } else if (currentEmail) {
-        await fetchProfileByEmail(currentEmail);
+      if (patchError) {
+        console.error('>>> [completeOnboarding] PATCH failed:', patchError);
+        throw new Error(patchError.message);
       }
 
-      // Navigate to main app
+      console.log('>>> [completeOnboarding] PATCH success — onboarding_completed=true on profile');
+      await fetchProfile(profileId, accessToken ?? undefined);
+
       router.replace(DEFAULT_MAIN_ROUTE as any);
     } catch (error) {
       console.error('>>> Error completing onboarding:', error);
       throw error;
     }
-  }, [user?.id, user?.email, emailUser?.email, fetchProfile, fetchProfileByEmail, router]);
+  }, [user?.id, user?.email, emailUser?.email, fetchProfile, router]);
 
   /**
    * Initialize auth state listener
@@ -756,7 +722,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(currentSession);
         setUser(currentSession.user);
         setAuthProvider('google');
-        await fetchProfile(currentSession.user.id);
+        await fetchProfile(currentSession.user.id, currentSession.access_token);
         setInitialized(true);
         return;
       }
@@ -767,8 +733,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('>>> Found stored email session:', storedSession.email);
         setEmailUser({ email: storedSession.email, userId: storedSession.userId, provider: 'email' });
         setAuthProvider('email');
-        // Fetch profile for email users from Supabase
-        await fetchProfileByEmail(storedSession.email);
+        if (storedSession.userId && storedSession.accessToken) {
+          await fetchProfile(storedSession.userId, storedSession.accessToken);
+        }
       } else {
         console.log('>>> No active session found');
       }
@@ -787,13 +754,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-          console.log('>>> Fetching profile for user:', currentSession.user.id);
-          await fetchProfile(currentSession.user.id);
-
           // Handle post-auth navigation on sign in
           if (event === 'SIGNED_IN') {
-            // Save session to AsyncStorage (critical for Google sign-in)
-            // This ensures getAccessToken() works for onboarding sync
             const provider = currentSession.user.app_metadata?.provider as AuthProvider || 'google';
             console.log('>>> Saving session to storage for provider:', provider);
             await saveSession(currentSession.user.email!, provider, {
@@ -802,8 +764,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               refreshToken: currentSession.refresh_token,
             });
 
+            // For Google auth: notify backend to create/upsert profile
+            if (provider === 'google') {
+              console.log('>>> Calling login-using-google to create profile...');
+              const googleRes = await post<{ profile: Profile }>(
+                ENDPOINTS.AUTH_LOGIN_GOOGLE,
+                { access_token: currentSession.access_token }
+              );
+              if (googleRes.data?.profile) {
+                setProfile(googleRes.data.profile);
+                console.log('>>> Google profile created/fetched:', googleRes.data.profile.email_id);
+              } else {
+                console.warn('>>> login-using-google returned no profile:', googleRes.error);
+                await fetchProfile(currentSession.user.id, currentSession.access_token);
+              }
+            } else {
+              await fetchProfile(currentSession.user.id, currentSession.access_token);
+            }
+
             console.log('>>> SIGNED_IN event - calling handlePostAuthNavigation');
-            await handlePostAuthNavigation(currentSession.user);
+            await handlePostAuthNavigation(currentSession.user, currentSession.access_token);
+          } else {
+            await fetchProfile(currentSession.user.id, currentSession.access_token);
           }
         } else {
           console.log('>>> No user in session, clearing profile');
@@ -815,7 +797,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [fetchProfile, fetchProfileByEmail, handlePostAuthNavigation]);
+  }, [fetchProfile, handlePostAuthNavigation]);
 
   const value: AuthContextType = {
     // State

@@ -161,7 +161,7 @@ export default function DisclaimerScreen() {
   }));
 
   const handleContinue = () => {
-    router.push('/(onboarding-new)/name-input' as any);
+    router.push('/(onboarding-new)/credibility' as any);
   };
 
   const handleInfoPress = () => {

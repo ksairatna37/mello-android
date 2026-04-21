@@ -15,7 +15,7 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native';
 import DreamyGradient from './DreamyGradient';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -37,7 +37,7 @@ interface AnimatedSplashProps {
 }
 
 export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) => {
-  const lottieRef = useRef<LottieView>(null);
+  // const lottieRef = useRef<LottieView>(null);
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
   const animationFinished = useRef(false);
@@ -47,14 +47,7 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
     () => DYNAMIC_PHRASES[Math.floor(Math.random() * DYNAMIC_PHRASES.length)]
   );
 
-  useEffect(() => {
-    // Play the animation
-    if (lottieRef.current) {
-      lottieRef.current.play();
-    }
-  }, []);
-
-  // Called when Lottie animation finishes
+  // Called when Lottie animation finishes (now triggered by useEffect timer)
   const handleAnimationFinish = () => {
     if (animationFinished.current) return; // Prevent double trigger
     animationFinished.current = true;
@@ -83,6 +76,11 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
     }, 2000);
   };
 
+  useEffect(() => {
+    const timer = setTimeout(handleAnimationFinish, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
   const containerStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
@@ -94,8 +92,13 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
       {/* Dreamy gradient background with floating clouds & particles */}
       <DreamyGradient />
 
-      {/* Mello text animation overlay */}
+      {/* SelfMind title */}
       <View style={styles.lottieContainer}>
+        <Text style={styles.SelfMindText}>SelfMind</Text>
+      </View>
+
+      {/* Apple-style "hello" Lottie animation — commented out for SelfMind rebrand */}
+      {/* <View style={styles.lottieContainer}>
         <LottieView
           ref={lottieRef}
           source={require('@/assets/animations/mello-hello.json')}
@@ -106,7 +109,7 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
           resizeMode="contain"
           onAnimationFinish={handleAnimationFinish}
         />
-      </View>
+      </View> */}
 
       {/* Fixed "take a deep breath" text */}
       <View style={styles.breatheContainer}>
@@ -133,6 +136,12 @@ const styles = StyleSheet.create({
   lottie: {
     width: SCREEN_WIDTH * 0.7,
     height: SCREEN_HEIGHT * 0.35,
+  },
+  SelfMindText: {
+    fontSize: 48,
+    fontFamily: 'DMSerif',
+    color: 'rgba(255, 255, 255, 0.95)',
+    letterSpacing: 1.5,
   },
   breatheContainer: {
     position: 'absolute',

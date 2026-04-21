@@ -1,12 +1,4 @@
-/**
- * Name Input Screen
- * Step 3 of new onboarding flow - collecting user's name
- *
- * Design: Pixel-perfect clone from Figma
- * Uses OnboardingLayout for consistent navigation
- */
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,249 +6,257 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Keyboard,
+  Pressable,
+  StatusBar,
   TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
-import OnboardingLayout from '@/components/onboarding/OnboardingLayout';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MelloGradient from '@/components/common/MelloGradient';
 import { updateOnboardingData, saveCurrentStep, getOnboardingData } from '@/utils/onboardingStorage';
-
-const CURRENT_STEP = 3;
-
-// Floating Label Input Component
-const FloatingLabelInput = ({
-  label,
-  value,
-  onChangeText,
-  autoFocus = false,
-  onSubmitEditing,
-  returnKeyType = 'next',
-  inputRef,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  autoFocus?: boolean;
-  onSubmitEditing?: () => void;
-  returnKeyType?: 'next' | 'done';
-  inputRef?: React.RefObject<TextInput>;
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-  const labelPosition = useSharedValue(value ? 1 : 0);
-
-  useEffect(() => {
-    if (value && labelPosition.value === 0) {
-      labelPosition.value = 1;
-    }
-  }, [value]);
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    labelPosition.value = withTiming(1, {
-      duration: 200,
-      easing: Easing.out(Easing.ease),
-    });
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    if (!value) {
-      labelPosition.value = withTiming(0, {
-        duration: 200,
-        easing: Easing.out(Easing.ease),
-      });
-    }
-  };
-
-  const labelStyle = useAnimatedStyle(() => {
-    return {
-      top: 12 + (1 - labelPosition.value) * 10,
-      fontSize: 14 + (1 - labelPosition.value) * 4,
-    };
-  });
-
-  return (
-    <View style={[styles.inputContainer, isFocused && styles.inputContainerFocused]}>
-      <Animated.Text style={[styles.floatingLabel, labelStyle]}>
-        {label}
-      </Animated.Text>
-      <TextInput
-        ref={inputRef}
-        style={styles.textInput}
-        value={value}
-        onChangeText={onChangeText}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        autoFocus={autoFocus}
-        autoCapitalize="words"
-        autoCorrect={false}
-        returnKeyType={returnKeyType}
-        onSubmitEditing={onSubmitEditing}
-        selectionColor="#4DA6E8"
-      />
-    </View>
-  );
-};
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function NameInputScreen() {
   const router = useRouter();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const lastNameRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
+  const { user, emailUser, authProvider } = useAuth();
 
-  // Save current step + load persisted data
+  const [firstName, setFirstName] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  const headerAnim = useSharedValue(0);
+  const inputAnim  = useSharedValue(0);
+  const btnAnim    = useSharedValue(0);
+
   useEffect(() => {
     saveCurrentStep('name-input');
-    const load = async () => {
-      const data = await getOnboardingData();
+
+    // Google/social auth — extract name and skip straight to questions
+    if (authProvider === 'google' && user) {
+      const meta = user.user_metadata ?? {};
+      const given = meta.given_name || (meta.full_name ?? meta.name ?? '').split(' ')[0] || '';
+      if (given) {
+        updateOnboardingData({ firstName: given }).catch(() => {});
+      }
+      router.replace('/(onboarding-new)/questions' as any);
+      return;
+    }
+
+    // Email auth — restore persisted value then animate in
+    getOnboardingData().then((data) => {
       if (data.firstName) setFirstName(data.firstName);
-      if (data.lastName) setLastName(data.lastName);
-    };
-    load();
+    });
+
+    const cfg = { duration: 420, easing: Easing.out(Easing.cubic) };
+    headerAnim.value = withDelay(60,  withTiming(1, cfg));
+    inputAnim.value  = withDelay(180, withTiming(1, cfg));
+    btnAnim.value    = withDelay(300, withTiming(1, cfg));
+
+    // Auto-focus after animation settles
+    const t = setTimeout(() => inputRef.current?.focus(), 350);
+    return () => clearTimeout(t);
   }, []);
+
+  const headerStyle = useAnimatedStyle(() => ({
+    opacity: headerAnim.value,
+    transform: [{ translateY: (1 - headerAnim.value) * 16 }],
+  }));
+  const inputStyle = useAnimatedStyle(() => ({
+    opacity: inputAnim.value,
+    transform: [{ translateY: (1 - inputAnim.value) * 14 }],
+  }));
+  const btnStyle = useAnimatedStyle(() => ({
+    opacity: btnAnim.value,
+    transform: [{ translateY: (1 - btnAnim.value) * 12 }],
+  }));
 
   const canContinue = firstName.trim().length > 0;
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(onboarding)/welcome');
-    }
-  };
-
   const handleContinue = async () => {
-    if (canContinue) {
-      // Save name to storage
-      await updateOnboardingData({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-      });
-      router.push({
-        pathname: '/(onboarding-new)/profile-picture',
-        params: { firstName: firstName.trim(), lastName: lastName.trim() },
-      } as any);
-    }
+    if (!canContinue) return;
+    await updateOnboardingData({ firstName: firstName.trim() });
+    router.replace('/(onboarding-new)/questions' as any);
   };
 
-  const dismissKeyboard = () => {
-    Keyboard.dismiss();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(onboarding-new)/personalize-intro' as any);
   };
+
+  // If Google user, render nothing while redirect happens
+  if (authProvider === 'google') return null;
 
   return (
-    <OnboardingLayout
-      currentStep={CURRENT_STEP}
-      onBack={handleBack}
-      onNext={handleContinue}
-      canGoBack={true}
-      canGoNext={canContinue}
-      showHelp={false}
-    >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
-      >
-        <TouchableWithoutFeedback onPress={dismissKeyboard}>
-          <View style={styles.content}>
-            {/* Title */}
-            <Text style={styles.title}>What's your name?</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+      <MelloGradient />
 
-            {/* Input Fields */}
-            <View style={styles.inputsWrapper}>
-              <FloatingLabelInput
-                label="First Name"
+      {/* Scrollable content — shrinks when keyboard appears */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={[styles.inner, { paddingTop: insets.top + 8 }]}>
+
+            {/* Header — mirrors QuestionPage counterRow (no progress bar) */}
+            <View style={styles.counterRow}>
+              <Pressable style={styles.headerBtn} hitSlop={8} onPress={handleBack}>
+                <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+              </Pressable>
+              <View style={{ flex: 1 }} />
+              <View style={styles.headerBtn} />
+            </View>
+
+            <Animated.View style={[styles.headerBlock, headerStyle]}>
+              <Text style={styles.title}>What should we call you?</Text>
+              <Text style={styles.subtitle}>Just your first name is enough.</Text>
+            </Animated.View>
+
+            <Animated.View style={[styles.inputWrap, isFocused && styles.inputWrapFocused, inputStyle]}>
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color={isFocused ? '#8B7EF8' : '#AAAABC'}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
                 value={firstName}
                 onChangeText={setFirstName}
-                autoFocus
-                returnKeyType="next"
-                onSubmitEditing={() => lastNameRef.current?.focus()}
-              />
-
-              <FloatingLabelInput
-                label="Last Name"
-                value={lastName}
-                onChangeText={setLastName}
-                inputRef={lastNameRef}
+                placeholder="Your first name"
+                placeholderTextColor="#BBBBCC"
+                autoCapitalize="words"
+                autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={handleContinue}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                selectionColor="#8B7EF8"
               />
+            </Animated.View>
 
-              {/* Privacy Note */}
-              <View style={styles.privacyNote}>
-                <Ionicons name="lock-closed" size={14} color="#9E9E9E" />
-                <Text style={styles.privacyText} numberOfLines={2}>
-                  We'll only use this information to personalize your experience.
-                </Text>
-              </View>
-            </View>
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </OnboardingLayout>
+
+      {/* Button anchored outside KAV — same bottom distance as personalize-intro */}
+      <Animated.View style={[styles.btnContainer, { paddingBottom: insets.bottom + 24 }, btnStyle]}>
+        <Pressable
+          style={[styles.btn, !canContinue && styles.btnDisabled]}
+          onPress={handleContinue}
+          disabled={!canContinue}
+        >
+          <Text style={styles.btnText}>Continue</Text>
+        </Pressable>
+      </Animated.View>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoid: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F0FF',
+  },
+  flex: {
     flex: 1,
   },
-  content: {
+  inner: {
     flex: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+  },
+  btnContainer: {
+    paddingHorizontal: 24,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 0,
+    paddingTop: 10,
+    marginBottom: 8,
+  },
+  headerBtn: {
+    width: 40,
+    marginLeft: -12,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBlock: {
+    marginTop: 16,
+    marginBottom: 32,
+    gap: 6,
   },
   title: {
-    fontSize: 32,
+    fontSize: 34,
     fontFamily: 'Outfit-Bold',
     color: '#1A1A1A',
-    marginBottom: 24,
+    lineHeight: 40,
   },
-  inputsWrapper: {
-    gap: 16,
-  },
-  inputContainer: {
-    backgroundColor: '#F5F0EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 12,
-    position: 'relative',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  inputContainerFocused: {
-    borderColor: '#E8E4E0',
-  },
-  floatingLabel: {
-    position: 'absolute',
-    left: 16,
-    color: '#9E9E9E',
+  subtitle: {
+    fontSize: 15,
     fontFamily: 'Outfit-Regular',
+    color: '#9999A8',
   },
-  textInput: {
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139,126,248,0.18)',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  inputWrapFocused: {
+    borderColor: '#8B7EF8',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  inputIcon: {
+    marginTop: 1,
+  },
+  input: {
+    flex: 1,
     fontSize: 18,
     fontFamily: 'Outfit-Medium',
     color: '#1A1A1A',
     padding: 0,
-    height: 24,
   },
-  privacyNote: {
-    flexDirection: 'row',
+  btn: {
+    backgroundColor: '#8B7EF8',
+    paddingVertical: 18,
+    borderRadius: 999,
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 4,
-    marginTop: 4,
+    shadowColor: '#8B7EF8',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  privacyText: {
-    fontSize: 13,
-    fontFamily: 'Outfit-Regular',
-    color: '#9E9E9E',
-    flex: 1,
+  btnDisabled: {
+    opacity: 0.45,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  btnText: {
+    fontSize: 17,
+    fontFamily: 'Outfit-SemiBold',
+    color: '#FFFFFF',
   },
 });

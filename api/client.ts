@@ -117,6 +117,21 @@ export async function post<T, B = unknown>(
 }
 
 /**
+ * Authenticated GET request helper (with Bearer token)
+ */
+export async function authGet<T>(
+  endpoint: string,
+  accessToken: string
+): Promise<ApiResponse<T>> {
+  return request<T>(endpoint, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+}
+
+/**
  * Authenticated POST request helper (with Bearer token)
  */
 export async function authPost<T, B = unknown>(
@@ -126,6 +141,23 @@ export async function authPost<T, B = unknown>(
 ): Promise<ApiResponse<T>> {
   return request<T>(endpoint, {
     method: 'POST',
+    body: JSON.stringify(body),
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+}
+
+/**
+ * Authenticated PATCH request helper (with Bearer token)
+ */
+export async function authPatch<T, B = unknown>(
+  endpoint: string,
+  body: B,
+  accessToken: string
+): Promise<ApiResponse<T>> {
+  return request<T>(endpoint, {
+    method: 'PATCH',
     body: JSON.stringify(body),
     headers: {
       'Authorization': `Bearer ${accessToken}`,

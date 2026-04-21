@@ -17,23 +17,24 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { DreamyGradient } from '@/components/common';
 import AuthBottomSheet from '@/components/onboarding/AuthBottomSheet';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [showAuthSheet, setShowAuthSheet] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
 
   const handleGetStarted = () => {
-    setAuthMode('signup');
-    setShowAuthSheet(true);
+    // Start onboarding questions — no auth needed yet
+    router.replace('/(onboarding-new)/credibility' as any);
   };
 
   const handleAlreadyHaveAccount = () => {
-    setAuthMode('signin');
     setShowAuthSheet(true);
   };
 
@@ -48,7 +49,7 @@ export default function WelcomeScreen() {
       <View style={[styles.content, { paddingTop: insets.top }]}>
         {/* Centered Logo Section */}
         <View style={styles.logoSection}>
-          <Text style={styles.logo}>mello</Text>
+          <Text style={styles.logo}>SelfMind</Text>
           <Text style={styles.tagline}>
             Your AI companion for{'\n'}Mental Wellness
           </Text>
@@ -65,7 +66,7 @@ export default function WelcomeScreen() {
             <Text style={styles.getStartedButtonText}>Get Started</Text>
           </TouchableOpacity>
 
-          {/* I already have an account - Ghost button */}
+          {/* I already have an account */}
           <TouchableOpacity
             style={styles.signInButton}
             onPress={handleAlreadyHaveAccount}
@@ -73,14 +74,26 @@ export default function WelcomeScreen() {
           >
             <Text style={styles.signInButtonText}>I already have an account</Text>
           </TouchableOpacity>
+
+          {/* Legal */}
+          <Text style={styles.legalText}>
+            By continuing you agree to SelfMind's{'\n'}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://melloai.health/terms')}>
+              Terms of Service
+            </Text>
+            {' '}and{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://melloai.health/privacy')}>
+              Privacy Policy
+            </Text>
+          </Text>
         </View>
       </View>
 
-      {/* Auth Bottom Sheet */}
+      {/* Auth Bottom Sheet — sign in only for returning users */}
       <AuthBottomSheet
         visible={showAuthSheet}
         onClose={() => setShowAuthSheet(false)}
-        initialMode={authMode}
+        initialMode="signin"
       />
     </View>
   );
@@ -101,7 +114,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     fontSize: 64,
-    fontFamily: 'Playwrite',
+    fontFamily: 'DMSerif',
     color: '#FFFFFF',
     marginBottom: 16,
     textShadowColor: 'rgba(0, 0, 0, 0.1)',
@@ -119,7 +132,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   buttonSection: {
-    gap: 12,
+    gap: 10,
   },
   tourButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -149,19 +162,30 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   getStartedButtonText: {
-    fontSize: 18,
-    fontFamily: 'Outfit-SemiBold',
+    fontSize: 17,
+    fontFamily: 'Outfit-Medium',
     color: '#FFFFFF',
   },
   signInButton: {
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 18,
+    borderRadius: 30,
     alignItems: 'center',
   },
   signInButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: 'Outfit-Medium',
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: '#1A1A1A',
+  },
+  legalText: {
+    fontSize: 13,
+    fontFamily: 'Outfit-Regular',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  legalLink: {
+    color: '#FFFFFF',
     textDecorationLine: 'underline',
-    textDecorationColor: 'rgba(255, 255, 255, 0.5)',
   },
 });

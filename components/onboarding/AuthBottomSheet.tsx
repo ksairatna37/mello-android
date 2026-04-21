@@ -58,7 +58,6 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
   const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -67,7 +66,6 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
 
   // Refs to track password input focus
   const passwordRef = useRef<TextInput>(null);
-  const confirmPasswordRef = useRef<TextInput>(null);
   const isPasswordInputFocused = useRef(false);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
@@ -157,16 +155,15 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
   };
 
   const handleAuth = async () => {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
     // Validate inputs
-    if (!email || !password) {
+    if (!trimmedEmail || !trimmedPassword) {
       setError('Please enter email and password');
       return;
     }
-    if (isSignUp && password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-    if (isSignUp && password.length < 6) {
+    if (isSignUp && trimmedPassword.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
@@ -181,7 +178,7 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
 
       if (isSignUp) {
         // Sign up with backend (only email and password, no confirmPassword)
-        result = await signUpWithEmail(email, password);
+        result = await signUpWithEmail(trimmedEmail, trimmedPassword);
 
         if (result.success && result.needsOtpVerification) {
           // Close sheet - navigation to OTP screen is handled by AuthContext
@@ -190,7 +187,7 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
         }
       } else {
         // Sign in with backend
-        result = await signInWithEmail(email, password);
+        result = await signInWithEmail(trimmedEmail, trimmedPassword);
       }
 
       if (result.success) {
@@ -234,9 +231,14 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
   };
 
   const toggleMode = () => {
-    setIsSignUp(!isSignUp);
-    setPassword('');
-    setConfirmPassword('');
+    if (!isSignUp) {
+      // New user — close sheet and start onboarding flow
+      handleClose();
+      router.replace('/(onboarding-new)/credibility' as any);
+    } else {
+      setIsSignUp(false);
+      setPassword('');
+    }
   };
 
   if (!isVisible) return null;
@@ -260,7 +262,7 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
             <Text style={styles.title}>
               {isSignUp ? (
                 <>
-                  Create a <Text style={styles.melloText}>mello</Text> space
+                  Create an Account
                 </>
               ) : (
                 'Welcome back'
@@ -322,41 +324,14 @@ export default function AuthBottomSheet({ visible, onClose, initialMode = 'signi
                 </View>
               </View>
 
-              {/* Confirm Password (Sign Up only) */}
-              {isSignUp && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>confirm password</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="lock-closed-outline" size={20} color="#9E9E9E" style={styles.inputIcon} />
-                    <TextInput
-                      ref={confirmPasswordRef}
-                      style={styles.input}
-                      placeholder="••••••••"
-                      placeholderTextColor="#BDBDBD"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      onFocus={() => {
-                        isPasswordInputFocused.current = true;
-                        keyboardOffset.value = withTiming(-150, { duration: 300 });
-                      }}
-                      onBlur={() => {
-                        isPasswordInputFocused.current = false;
-                      }}
-                    />
-                  </View>
-                </View>
-              )}
-
               {/* Auth Button */}
               <TouchableOpacity
                 style={[
                   styles.authButton,
-                  (!email || !password || (isSignUp && password !== confirmPassword)) && styles.authButtonDisabled
+                  (!email || !password) && styles.authButtonDisabled
                 ]}
                 onPress={handleAuth}
-                disabled={isLoading || !email || !password || (isSignUp && password !== confirmPassword)}
+                disabled={isLoading || !email || !password}
                 activeOpacity={0.8}
               >
                 <Text style={styles.authButtonText}>
@@ -476,7 +451,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   melloText: {
-    fontFamily: 'Playwrite',
+    fontFamily: 'DMSerif',
     fontSize: 28,
     color: '#1A1A1A',
   },

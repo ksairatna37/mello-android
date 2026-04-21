@@ -47,9 +47,13 @@ export interface OnboardingData {
   textToSelf?: string;         // Q4: what you'd text yourself 6 months ago (preset option)
   textToSelfCustom?: string;   // Q4: custom written answer
   emotionalBattery?: string;   // Q5: emotional battery level (0-100)
+  weakestDimension?: string;   // Q6: which emotional dimension feels hardest (calm/clarity/focus/confidence/positivity)
 
   // Get Rolling flow data
   ageRange?: string;           // Age selection (under-18, 18-24, 25-34, etc.)
+  gender?: string;             // Q8: gender identity
+  emotionalGrowth?: string;      // Q9: emotional growth level (1=Seedling, 2=Growing, 3=Thriving)
+  supportStyle?: string;       // Q10: what kind of support they want
   avatarReason?: string;       // Why they picked their avatar
   discomfortReasons?: string[]; // What's weighing on them (multi-select)
   style?: string;              // Communication style preference

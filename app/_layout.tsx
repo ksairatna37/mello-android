@@ -28,6 +28,10 @@ import {
 import {
   PlaywriteHRLijeva_400Regular,
 } from '@expo-google-fonts/playwrite-hr-lijeva';
+import {
+  DMSerifDisplay_400Regular,
+} from '@expo-google-fonts/dm-serif-display';
+import { Ionicons } from '@expo/vector-icons';
 import { AnimatedSplash } from '@/components/common/AnimatedSplash';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -54,6 +58,10 @@ export default function RootLayout() {
           'Outfit-Black': Outfit_900Black,
           // Brand font for "mello" logo
           'Playwrite': PlaywriteHRLijeva_400Regular,
+          // Serif accent font — use fontFamily: 'DMSerif'
+          'DMSerif': DMSerifDisplay_400Regular,
+          // Vector icons — preload to avoid Metro asset-download errors
+          ...Ionicons.font,
         });
         setFontsLoaded(true);
       } catch (error) {

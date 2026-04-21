@@ -26,8 +26,16 @@ export default function OnboardingNewLayout() {
       }}
     >
       <Stack.Screen name="verify-email" />
+      <Stack.Screen name="save-profile" />
+      <Stack.Screen name="share-result" />
       <Stack.Screen name="disclaimer" />
+      <Stack.Screen name="credibility" />
       <Stack.Screen name="name-input" />
+      <Stack.Screen name="personalize-intro" />
+      <Stack.Screen name="questions" />
+      <Stack.Screen name="analysing" />
+      <Stack.Screen name="emotional-mindwave" />
+      <Stack.Screen name="welcome-aboard" />
       <Stack.Screen name="profile-picture" />
       <Stack.Screen name="feelings-select" />
       <Stack.Screen name="mood-weight" />
