@@ -5,14 +5,15 @@
  */
 
 import { signRequest } from '@/utils/sigv4';
+import { ENV } from '@/config/env';
 
 // CONFIG
 
-const REGION = process.env.EXPO_PUBLIC_AWS_BEDROCK_REGION!.trim();
-const MODEL_ARN = process.env.EXPO_PUBLIC_AWS_BEDROCK_MODEL_ARN!.trim();
-const AWS_ACCESS_KEY_ID = process.env.EXPO_PUBLIC_AWS_ACCESS_KEY_ID!.trim();
-const AWS_SECRET_ACCESS_KEY = process.env.EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY!.trim();
-const AWS_SESSION_TOKEN = process.env.EXPO_PUBLIC_AWS_SESSION_TOKEN?.trim();
+const REGION = ENV.awsBedrockRegion;
+const MODEL_ARN = ENV.awsBedrockModelArn;
+const AWS_ACCESS_KEY_ID = ENV.awsAccessKeyId;
+const AWS_SECRET_ACCESS_KEY = ENV.awsSecretAccessKey;
+const AWS_SESSION_TOKEN = undefined; // use EAS secret AWS_SESSION_TOKEN if needed
 
 const BEDROCK_URL = `https://bedrock-runtime.${REGION}.amazonaws.com/model/${MODEL_ARN}/converse`;
 

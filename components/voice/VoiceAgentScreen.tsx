@@ -80,8 +80,10 @@ type ChatMessage = {
 // CONSTANTS
 // ═══════════════════════════════════════════════════
 
-const HUME_API_KEY = process.env.EXPO_PUBLIC_HUME_API_KEY || '';
-const HUME_DEFAULT_CONFIG_ID = process.env.EXPO_PUBLIC_HUME_CONFIG_ID || '';
+import { ENV } from '@/config/env';
+
+const HUME_API_KEY = ENV.humeApiKey;
+const HUME_DEFAULT_CONFIG_ID = ENV.humeConfigId;
 
 // Language options: English (Hume) or Hindi (LiveKit + Sarvam)
 type VoiceLanguage = 'english' | 'hindi';

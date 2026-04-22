@@ -1,0 +1,18 @@
+# Hume AI EVI (Empathic Voice Interface)
+# Get your keys from: https://app.hume.ai/keys
+# Create EVI config from: https://app.hume.ai/evi
+EXPO_PUBLIC_HUME_API_KEY=lNacYQhyNIzEPdIgUb6KkgSUex1VUkYjKnPQkYA3jExLudOg
+EXPO_PUBLIC_HUME_CONFIG_ID=3cdbbe91-bbf6-4e38-93b2-6166b113498a
+
+# LiveKit (Hindi Voice via webapp server)
+# For local development (use your computer's IP, not localhost):
+EXPO_PUBLIC_LIVEKIT_API_URL=https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token
+# For production, use:
+# EXPO_PUBLIC_LIVEKIT_API_URL=https://your-webapp.com/api/livekit-token
+
+# AWS Bedrock (Llama 3 8B for text chat) — SigV4 IAM auth
+EXPO_PUBLIC_AWS_BEDROCK_REGION=us-east-1
+EXPO_PUBLIC_AWS_BEDROCK_MODEL_ARN=meta.llama3-8b-instruct-v1:0
+EXPO_PUBLIC_AWS_ACCESS_KEY_ID=AKIAQXCP2QVAANQ7MLRN
+EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY=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
+

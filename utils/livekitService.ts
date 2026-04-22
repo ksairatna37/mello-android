@@ -29,7 +29,9 @@ export interface LiveKitTokenResponse {
 // CONSTANTS
 // ═══════════════════════════════════════════════════
 
-const LIVEKIT_API_URL = process.env.EXPO_PUBLIC_LIVEKIT_API_URL || 'http://localhost:3001/api/livekit-token';
+import { ENV } from '@/config/env';
+
+const LIVEKIT_API_URL = ENV.livekitApiUrl || 'http://localhost:3001/api/livekit-token';
 
 // ═══════════════════════════════════════════════════
 // SERVICE
@@ -80,7 +82,7 @@ export async function fetchLiveKitToken(
  * Check if LiveKit API is configured
  */
 export function isLiveKitConfigured(): boolean {
-  return Boolean(process.env.EXPO_PUBLIC_LIVEKIT_API_URL);
+  return Boolean(ENV.livekitApiUrl);
 }
 
 /**

@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 22,
-    lineHeight: 26,
+    fontFamily: 'System',
   },
   optionTextBlock: {
     flex: 1,

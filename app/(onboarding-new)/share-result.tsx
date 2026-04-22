@@ -24,9 +24,10 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import RNShare from 'react-native-share';
+import { TurboModuleRegistry } from 'react-native';
+
+const isViewShotAvailable = !!TurboModuleRegistry.get('RNViewShot');
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MelloGradient from '@/components/common/MelloGradient';
 import { getEmotionalProfile } from '@/utils/emotionalProfileCache';
@@ -123,10 +124,10 @@ function ShareSheet({ visible, imageUri, shareText, onClose }: ShareSheetProps) 
     if (!imageUri) return;
     try {
       if (Platform.OS === 'ios') {
-        // iOS: Share.share supports image (url) + text (message) together
         await Share.share({ message: shareText, url: imageUri });
       } else {
-        // Android: react-native-share sends both image + text in one intent
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const RNShare = require('react-native-share').default;
         await RNShare.open({
           title: 'Your Emotional Profile',
           message: shareText,
@@ -358,10 +359,14 @@ export default function ShareResultScreen() {
     // Capture at peak of flash, before sheet opens
     await new Promise<void>((r) => setTimeout(r, 180));
     let uri: string | null = null;
-    try {
-      uri = await captureRef(cardRef, { format: 'png', quality: 1 });
-      setCapturedUri(uri);
-    } catch {}
+    if (isViewShotAvailable) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { captureRef } = require('react-native-view-shot');
+        uri = await captureRef(cardRef, { format: 'png', quality: 1 });
+        setCapturedUri(uri);
+      } catch {}
+    }
 
     // Wait for flash to settle then open sheet
     await new Promise<void>((r) => setTimeout(r, 600));

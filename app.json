@@ -14,7 +14,8 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": true,
+      "buildNumber": "1",
+      "supportsTablet": false,
       "bundleIdentifier": "health.melloai.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Mello needs microphone access for voice conversations.",
@@ -24,8 +25,14 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.499732705533-ot31akqnmvgvona2a89j2dbhfle7a2om"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.499732705533-ot31akqnmvgvona2a89j2dbhfle7a2om"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
