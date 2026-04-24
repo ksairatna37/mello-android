@@ -40,3 +40,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# native module build intermediates (regenerated on every build)
+modules/**/build/
+modules/**/.cxx/
+modules/**/.gradle/
+modules/**/android/.kotlin/

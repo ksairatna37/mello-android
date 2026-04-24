@@ -51,7 +51,10 @@ export async function request<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
   const controller = createTimeoutController(REQUEST_TIMEOUT);
+  const started = Date.now();
+  console.log(`[api] → ${method} ${endpoint}`);
 
   try {
     const response = await fetch(url, {
@@ -63,16 +66,24 @@ export async function request<T>(
       signal: controller.signal,
     });
 
+    const ms = Date.now() - started;
+
     // Success response
     if (response.ok) {
       const data = await response.json();
+      console.log(`[api] ← ${method} ${endpoint} ${response.status} (${ms}ms)`);
       return { data, error: null };
     }
 
     // Error response
     const error = await parseErrorResponse(response);
+    console.warn(
+      `[api] ← ${method} ${endpoint} ${response.status} (${ms}ms) — ${error.message}`,
+    );
     return { data: null, error };
   } catch (err: any) {
+    const ms = Date.now() - started;
+    console.warn(`[api] ✕ ${method} ${endpoint} (${ms}ms) — ${err?.name ?? 'Error'}: ${err?.message ?? err}`);
     // Network or timeout error
     if (err.name === 'AbortError') {
       return {
