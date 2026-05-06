@@ -145,14 +145,15 @@ These are the most important facts for a rebuild team.
 
 ### 5.1 Source-of-truth drift exists
 
-The repo has conflicting backend documentation:
+The application backend now lives on AWS ECS (Asia Pacific Hyderabad):
 
-- `docs/BACKEND_API.md` says Azure backend base URL:
-  - `https://new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io`
-- actual runtime code in `api/endpoints.ts` uses:
-  - `https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws`
+- Base URL: `https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws`
+- Live API docs: `{BASE_URL}/docs`
+- Used by `api/endpoints.ts`. Endpoint paths unchanged from the prior Azure deployment.
 
-For rebuild purposes: trust the code first, docs second.
+(History note: previously hosted on Azure West US at
+`new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io` —
+deprecated, do not use.)
 
 ### 5.2 Auth is hybrid, not unified
 
@@ -221,9 +222,10 @@ This repo contains live-looking keys and IDs in plain text. These should be trea
 Current contents:
 
 ```env
-EXPO_PUBLIC_HUME_API_KEY=lNacYQhyNIzEPdIgUb6KkgSUex1VUkYjKnPQkYA3jExLudOg
-EXPO_PUBLIC_HUME_CONFIG_ID=3cdbbe91-bbf6-4e38-93b2-6166b113498a
-EXPO_PUBLIC_LIVEKIT_API_URL=https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token
+# Real values live in local .env / EAS Secrets — never commit them.
+EXPO_PUBLIC_HUME_API_KEY=<redacted>
+EXPO_PUBLIC_HUME_CONFIG_ID=<redacted>
+EXPO_PUBLIC_LIVEKIT_API_URL=<redacted>
 ```
 
 ### Hardcoded Supabase configuration

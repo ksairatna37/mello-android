@@ -1,29 +1,39 @@
 /**
- * Chat Service - Production Level
+ * Chat Service — row-shape against `public.chats` (post-migration).
  *
- * Handles all chat operations with Supabase:
- * - Create/load/update chats
- * - Full conversation memory (AI remembers everything)
- * - Auto-generate title, summary, duration on chat end
+ * The backend now exposes proper row-per-chat endpoints (per /docs):
  *
- * Schema: public.chats
- * - id, user_id, title, created_at, updated_at
- * - duration, conversation (JSON), start_time, end_time
- * - type, summary
+ *   POST /rest/v1/upload/chat          insert one row, returns full row
+ *   GET  /rest/v1/load/chat?user_id=X  array of public.chats rows desc
+ *   POST /rest/v1/update/chat          update one row (body must include `id`)
+ *
+ *   No DELETE endpoint exists yet — `deleteChat` is a soft-stub that
+ *   warns. Backend team to add `DELETE /chats?id=…` next.
+ *
+ * Public function signatures are unchanged so callers (ChatScreen,
+ * ChatSidebar, ChatHistory, voiceChatService) don't move.
+ *
+ * Why row-shape now: backend used to write a JSON blob into
+ * `user_onboarding.chat`. That god-table architecture rewrote the
+ * whole user record on every save, broke multi-device sync, and
+ * scaled badly. Backend migrated 2026-05-01; details + verification
+ * curl runs are in `docs/BACKEND_GOD_TABLE_ISSUE.md`.
  */
 
-import { supabase } from '@/lib/supabase';
+import { authPost } from '@/api/client';
+import { ENDPOINTS } from '@/api/endpoints';
+import { getAccessToken, getSession } from '@/services/auth';
 import { generateChatTitle, generateChatSummary } from './bedrockService';
 import type { BedrockMessage } from './bedrockService';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TYPES
+// TYPES (public surface unchanged)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-  timestamp: number; // Unix timestamp ms
+  timestamp: number; // Unix ms
 }
 
 export interface Chat {
@@ -38,6 +48,8 @@ export interface Chat {
   end_time: number | null;
   type: string | null;
   summary: string | null;
+  is_starred?: boolean;
+  feedback?: ChatFeedback;
 }
 
 export interface ChatListItem {
@@ -48,138 +60,154 @@ export interface ChatListItem {
   is_starred?: boolean;
 }
 
+export type ChatFeedback = 'liked' | 'disliked' | null;
+
 // ═══════════════════════════════════════════════════════════════════════════
-// CREATE CHAT
+// AUTH
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Create a new chat session
- */
-export async function createChat(userId: string, type: 'textchat' | 'voicechat' = 'textchat'): Promise<Chat | null> {
-  const startTime = Date.now();
-
-  console.log('=== CREATE CHAT ===');
-  console.log('>>> userId:', userId, 'type:', type, 'start_time:', startTime);
-
-  const { data, error } = await supabase
-    .from('chats')
-    .insert({
-      user_id: userId,
-      title: 'New chat',
-      type,
-      start_time: startTime,   // bigint — ms since epoch
-      conversation: [],
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('>>> createChat error:', error);
+async function getAuth(): Promise<{ token: string; userId: string } | null> {
+  const token = await getAccessToken();
+  const session = await getSession();
+  if (!token || !session?.userId) {
+    console.warn('[chatService] no auth — request skipped');
     return null;
   }
-
-  console.log('>>> Chat created:', data.id, 'start_time:', data.start_time);
-  return data as Chat;
+  return { token, userId: session.userId };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GET CHATS (FOR SIDEBAR)
+// CREATE  (POST /upload/chat)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Get all chats for a user (sidebar list)
- * Returns lightweight list sorted by most recent
- */
-export async function getChats(userId: string, limit = 50): Promise<ChatListItem[]> {
-  console.log('=== GET CHATS ===');
+export async function createChat(
+  userId: string,
+  type: 'textchat' | 'voicechat' = 'textchat',
+): Promise<Chat | null> {
+  console.log('=== CREATE CHAT === userId=' + userId.slice(0, 8) + '… type=' + type);
+  const auth = await getAuth();
+  if (!auth) return null;
 
-  const { data, error } = await supabase
-    .from('chats')
-    .select('id, title, updated_at, type, is_starred')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(limit);
+  const body = {
+    user_id: userId,
+    title: 'New chat',
+    type,
+    conversation: [] as ChatMessage[],
+    start_time: Date.now(),
+    is_starred: false,
+    feedback: null as ChatFeedback,
+  };
 
+  const { data, error } = await authPost<Chat, typeof body>(
+    '/rest/v1/upload/chat',
+    body,
+    auth.token,
+  );
+  if (error || !data) {
+    console.error('[chatService] createChat error:', error?.message);
+    return null;
+  }
+  console.log('>>> Chat created:', data.id);
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIST + GET  (GET /load/chat)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Single GET that returns every chat row for the user. We cache the
+ *  raw response per call so `getChats` and a sibling `getChat` lookup
+ *  don't double-fetch in tight succession. The cache is per-call (no
+ *  TTL) — callers explicitly request fresh data each time. */
+async function loadAllChats(): Promise<Chat[]> {
+  const auth = await getAuth();
+  if (!auth) return [];
+
+  console.log('[chatService] loadAllChats → POST /load/chat user_id=' + auth.userId.slice(0, 8) + '…');
+  const { data, error } = await authPost<Chat[], { user_id: string }>(
+    '/rest/v1/load/chat',
+    { user_id: auth.userId },
+    auth.token,
+  );
   if (error) {
-    console.error('>>> getChats error:', error);
+    if (error.status === 404) return [];
+    console.error('[chatService] loadAllChats error:', error.message);
     return [];
   }
+  if (!Array.isArray(data)) {
+    console.warn('[chatService] loadAllChats: unexpected response shape');
+    return [];
+  }
+  return data;
+}
 
-  console.log('>>> Found', data?.length || 0, 'chats');
-  return (data || []).map(chat => ({
-    id: chat.id,
-    title: chat.title || 'New chat',
-    updated_at: chat.updated_at,
-    type: chat.type,
-    is_starred: chat.is_starred ?? false,
-  }));
+export async function getChats(userId: string, limit = 50): Promise<ChatListItem[]> {
+  console.log('=== GET CHATS === userId=' + userId.slice(0, 8) + '…');
+  const rows = await loadAllChats();
+  const items: ChatListItem[] = rows
+    .slice(0, limit)
+    .map((c) => ({
+      id: c.id,
+      title: c.title || 'New chat',
+      updated_at: c.updated_at,
+      type: c.type,
+      is_starred: c.is_starred ?? false,
+    }));
+  console.log('>>> Found', items.length, 'chats');
+  return items;
+}
+
+export async function getChat(chatId: string): Promise<Chat | null> {
+  console.log('=== GET CHAT === id=' + chatId);
+  const rows = await loadAllChats();
+  const chat = rows.find((c) => c.id === chatId) ?? null;
+  if (!chat) console.log('>>> getChat: not found');
+  else console.log('>>> getChat: found, msgs=' + (chat.conversation?.length ?? 0));
+  return chat;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GET SINGLE CHAT (WITH MESSAGES)
+// UPDATE  (POST /update/chat)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Load a specific chat with full conversation history
- */
-export async function getChat(chatId: string): Promise<Chat | null> {
-  console.log('=== GET CHAT ===');
-  console.log('>>> chatId:', chatId);
+/** Thin helper — every mutation eventually goes through this. */
+async function updateChat(
+  chatId: string,
+  patch: Partial<Omit<Chat, 'id' | 'user_id' | 'created_at'>>,
+): Promise<Chat | null> {
+  const auth = await getAuth();
+  if (!auth) return null;
 
-  const { data, error } = await supabase
-    .from('chats')
-    .select('*')
-    .eq('id', chatId)
-    .single();
-
+  const body = { id: chatId, user_id: auth.userId, ...patch };
+  const { data, error } = await authPost<Chat, typeof body>(
+    '/rest/v1/update/chat',
+    body,
+    auth.token,
+  );
   if (error) {
-    console.error('>>> getChat error:', error);
+    console.warn('[chatService] updateChat error:', error.message);
     return null;
   }
-
-  console.log('>>> Loaded chat with', (data.conversation as ChatMessage[])?.length || 0, 'messages');
-  return data as Chat;
+  return data ?? null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ADD MESSAGE
+// ADD MESSAGE — append to conversation[] and PATCH-update the row
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Add a message to conversation and update the chat
- * Returns the updated conversation for immediate use
- */
 export async function addMessage(
   chatId: string,
   role: 'user' | 'assistant',
   content: string,
-  existingConversation: ChatMessage[] = []
+  existingConversation: ChatMessage[] = [],
 ): Promise<ChatMessage[]> {
-  console.log('=== ADD MESSAGE ===');
-  console.log('>>> chatId:', chatId, 'role:', role, 'content length:', content.length);
+  console.log('=== ADD MESSAGE === id=' + chatId + ' role=' + role + ' len=' + content.length);
 
-  const newMessage: ChatMessage = {
-    role,
-    content,
-    timestamp: Date.now(),
-  };
-
+  const newMessage: ChatMessage = { role, content, timestamp: Date.now() };
   const updatedConversation = [...existingConversation, newMessage];
 
-  const { error } = await supabase
-    .from('chats')
-    .update({
-      conversation: updatedConversation,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', chatId);
-
-  if (error) {
-    console.error('>>> addMessage error:', error);
-  } else {
-    console.log('>>> Message added, total:', updatedConversation.length);
-  }
-
+  await updateChat(chatId, { conversation: updatedConversation });
+  console.log('>>> Message added, total:', updatedConversation.length);
   return updatedConversation;
 }
 
@@ -187,254 +215,174 @@ export async function addMessage(
 // UPDATE TITLE
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Update chat title (can be called with AI-generated title)
- */
 export async function updateTitle(chatId: string, title: string): Promise<void> {
-  console.log('=== UPDATE TITLE ===');
-  console.log('>>> chatId:', chatId, 'title:', title);
-
-  const { error } = await supabase
-    .from('chats')
-    .update({ title })
-    .eq('id', chatId);
-
-  if (error) {
-    console.error('>>> updateTitle error:', error);
-  }
+  console.log('=== UPDATE TITLE === id=' + chatId + ' title=' + title);
+  await updateChat(chatId, { title });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// GENERATE & SET TITLE (AI)
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * Generate title using AI and update the chat
- * Call this after first AI response
+ * Generate a short, descriptive title via the model and persist it.
  */
 export async function generateAndSetTitle(
   chatId: string,
-  conversation: ChatMessage[]
+  conversation: ChatMessage[],
 ): Promise<string> {
-  console.log('=== GENERATE & SET TITLE ===');
-
-  // Convert to Bedrock format
-  const bedrockMessages: BedrockMessage[] = conversation.map(m => ({
-    role: m.role,
-    content: [{ text: m.content }],
-  }));
-
-  // Generate title via AI
-  const aiTitle = await generateChatTitle(bedrockMessages);
-
-  // Fallback to first user message truncated
-  const firstUserMsg = conversation.find(m => m.role === 'user')?.content || 'New chat';
-  const fallback = firstUserMsg.length > 40
-    ? firstUserMsg.slice(0, 40).trimEnd() + '...'
-    : firstUserMsg;
-
-  const title = aiTitle || fallback;
-
-  await updateTitle(chatId, title);
-  console.log('>>> Title set:', title);
-
-  return title;
+  console.log('=== GENERATE TITLE === id=' + chatId);
+  // bedrockService.generateChatTitle wants BedrockMessage[] shape
+  // (content: [{ text }]), not raw ChatMessage[] (content: string).
+  // Skipping the conversion produced "User: undefined / Mello: undefined"
+  // prompts and useless one-size-fits-all titles.
+  const title = await generateChatTitle(toBedrockFormat(conversation))
+    .catch(() => 'New chat');
+  await updateTitle(chatId, title || 'New chat');
+  return title || 'New chat';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// END CHAT (FINALIZE)
+// END CHAT — set end_time + duration; persist conversation
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Finalize chat when user ends or leaves.
- *
- * Micro-tasks fired as background (non-blocking):
- *   1. Re-generate title from full conversation (more accurate than first-exchange title)
- *   2. Generate summary
- *
- * Blocking write:
- *   - end_time, duration in one Supabase update
- */
 export async function endChat(
   chatId: string,
   conversation: ChatMessage[],
-  startTime: number
+  startTime: number | null,
 ): Promise<void> {
-  console.log('=== END CHAT ===');
-  console.log('>>> chatId:', chatId, 'messages:', conversation.length);
-
-  if (conversation.length === 0) {
-    console.log('>>> Empty conversation, skipping endChat');
-    return;
-  }
-
+  console.log('=== END CHAT === id=' + chatId + ' msgs=' + conversation.length);
   const endTime = Date.now();
-  // startTime may be 0 for chats that predated our schema — guard against negative duration
-  const duration = startTime > 0 ? endTime - startTime : null;
-
-  // ── Background micro-tasks ─────────────────────────────────────────────
-  // Re-generate title with full conversation (better accuracy than first-exchange)
-  generateAndSetTitle(chatId, conversation).then((title) => {
-    console.log('>>> [endChat] Final title set:', title);
+  const duration = startTime ? endTime - startTime : null;
+  await updateChat(chatId, {
+    conversation,
+    end_time: endTime,
+    duration,
   });
-
-  // Generate summary once at the end
-  generateAndSetSummary(chatId, conversation);
-
-  // ── Write end metrics ──────────────────────────────────────────────────
-  const { error } = await supabase
-    .from('chats')
-    .update({
-      end_time: endTime,
-      ...(duration !== null && { duration }),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', chatId);
-
-  if (error) {
-    console.error('>>> endChat error:', error);
-  } else {
-    console.log('>>> Chat ended. Duration:', duration ? Math.round(duration / 1000) + 's' : 'unknown');
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GENERATE & SET SUMMARY (AI)
+// SUMMARY
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Generate summary using AI and update the chat
- * Called when chat ends
- */
 export async function generateAndSetSummary(
   chatId: string,
-  conversation: ChatMessage[]
-): Promise<void> {
-  console.log('=== GENERATE & SET SUMMARY ===');
-
-  if (conversation.length < 2) {
-    console.log('>>> Too short for summary');
-    return;
-  }
-
-  // Convert to Bedrock format
-  const bedrockMessages: BedrockMessage[] = conversation.map(m => ({
-    role: m.role,
-    content: [{ text: m.content }],
-  }));
-
-  const summary = await generateChatSummary(bedrockMessages);
-
-  if (summary) {
-    const { error } = await supabase
-      .from('chats')
-      .update({ summary })
-      .eq('id', chatId);
-
-    if (error) {
-      console.error('>>> setSummary error:', error);
-    } else {
-      console.log('>>> Summary set:', summary.substring(0, 100) + '...');
-    }
-  }
+  conversation: ChatMessage[],
+): Promise<string> {
+  console.log('=== GENERATE SUMMARY === id=' + chatId);
+  // Same shape conversion as generateAndSetTitle — bedrockService
+  // expects BedrockMessage[] not ChatMessage[].
+  const summary = await generateChatSummary(toBedrockFormat(conversation))
+    .catch(() => '');
+  if (summary) await updateChat(chatId, { summary });
+  return summary || '';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DELETE CHAT
+// DELETE — TEMPORARILY UNAVAILABLE
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Delete a chat
+ * DELETE endpoint for chats does not exist yet in the backend (only
+ * journal_entries has DELETE per /docs as of the 2026-05-01 migration).
+ * Returns false so callers can show an "unsupported" hint to the user.
+ * Backend ticket: add `DELETE /rest/v1/chats?user_id=…&id=…`.
  */
 export async function deleteChat(chatId: string): Promise<boolean> {
-  console.log('=== DELETE CHAT ===');
-  console.log('>>> chatId:', chatId);
-
-  const { error } = await supabase
-    .from('chats')
-    .delete()
-    .eq('id', chatId);
-
-  if (error) {
-    console.error('>>> deleteChat error:', error);
-    return false;
-  }
-
-  console.log('>>> Chat deleted');
-  return true;
+  console.warn('[chatService] deleteChat — backend has no DELETE endpoint yet, no-op. id=' + chatId);
+  return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STAR CHAT
+// STAR
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Toggle star on a chat.
- * Requires an `is_starred` boolean column in the chats table.
- * SQL: ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS is_starred boolean DEFAULT false;
- */
 export async function starChat(chatId: string, starred: boolean): Promise<void> {
-  console.log('=== STAR CHAT ===', chatId, starred);
-  const { error } = await supabase
-    .from('chats')
-    .update({ is_starred: starred, updated_at: new Date().toISOString() })
-    .eq('id', chatId);
-  if (error) console.error('>>> starChat error:', error);
+  console.log('=== STAR CHAT === id=' + chatId + ' starred=' + starred);
+  await updateChat(chatId, { is_starred: starred });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CHAT FEEDBACK (like / dislike)
+// FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ChatFeedback = 'liked' | 'disliked' | null;
+export async function updateChatFeedback(
+  chatId: string,
+  feedback: ChatFeedback,
+): Promise<void> {
+  console.log('=== UPDATE CHAT FEEDBACK === id=' + chatId + ' feedback=' + feedback);
+  await updateChat(chatId, { feedback });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VOICE → CHAT BRIDGE
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Store overall chat feedback (thumbs up / down).
- * Requires a `feedback` text column in the chats table.
- * SQL: ALTER TABLE public.chats ADD COLUMN IF NOT EXISTS feedback text;
+ * Insert a finished voice session as a chat row. Called by
+ * `finalizeVoiceSession` in `voiceChatService.ts`. Public only because
+ * it crosses service boundaries.
  */
-export async function updateChatFeedback(chatId: string, feedback: ChatFeedback): Promise<void> {
-  console.log('=== CHAT FEEDBACK ===', chatId, feedback);
-  const { error } = await supabase
-    .from('chats')
-    .update({ feedback, updated_at: new Date().toISOString() })
-    .eq('id', chatId);
-  if (error) console.error('>>> updateChatFeedback error:', error);
+export async function addVoiceChatToBlob(args: {
+  title: string;
+  summary: string | null;
+  conversation: Array<{ role: 'user' | 'assistant'; content: string; timestamp: number }>;
+  startTime: number;
+  endTime: number;
+  duration: number;
+}): Promise<void> {
+  console.log('=== ADD VOICE CHAT === title=' + args.title);
+  const auth = await getAuth();
+  if (!auth) return;
+
+  const body = {
+    user_id: auth.userId,
+    title: args.title,
+    summary: args.summary,
+    type: 'voicechat',
+    conversation: args.conversation as ChatMessage[],
+    start_time: args.startTime,
+    end_time: args.endTime,
+    duration: args.duration,
+    is_starred: false,
+    feedback: null as ChatFeedback,
+  };
+  const { data, error } = await authPost<Chat, typeof body>(
+    '/rest/v1/upload/chat',
+    body,
+    auth.token,
+  );
+  if (error) {
+    console.error('[chatService] addVoiceChatToBlob error:', error.message);
+    return;
+  }
+  console.log('>>> Voice chat row created:', data?.id);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Convert conversation to Bedrock format for AI calls
- * This is how we maintain full memory - pass ALL messages
- */
+/** Convert ChatMessage[] → BedrockMessage[] for AI calls. */
 export function toBedrockFormat(conversation: ChatMessage[]): BedrockMessage[] {
-  return conversation.map(m => ({
+  return conversation.map((m) => ({
     role: m.role,
     content: [{ text: m.content }],
   }));
 }
 
-/**
- * Format relative time for display
- */
+/** "today" / "yesterday" / "march 14" / "Mar 14, 2025" relative time. */
 export function formatRelativeTime(isoDate: string): string {
-  const date = new Date(isoDate);
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  const hours = Math.floor(diffMs / 3600000);
-  const days = Math.floor(diffMs / 86400000);
-
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-  });
+  if (!isoDate) return '';
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return 'today';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'yesterday';
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString(
+    'en-US',
+    sameYear
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' },
+  ).toLowerCase();
 }

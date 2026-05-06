@@ -218,12 +218,15 @@ export default function HindiVoiceScreen({ onBack }: HindiVoiceScreenProps) {
             forceHandleAudioRouting: true,
           },
         },
+        // category/categoryOptions/mode are accepted at runtime by the
+        // native module but no longer typed in the LiveKit SDK; the cast
+        // keeps the actual configuration in place.
         ios: {
           defaultOutput: 'speaker',
           category: 'playAndRecord',
           categoryOptions: ['defaultToSpeaker', 'allowBluetooth'],
-          mode: 'voiceChat',  // Enables echo cancellation on iOS
-        },
+          mode: 'voiceChat',
+        } as any,
       });
       await AudioSession.startAudioSession();
 

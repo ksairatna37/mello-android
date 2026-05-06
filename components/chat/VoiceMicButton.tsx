@@ -55,13 +55,13 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
+  Easing,
   runOnJS,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { BRAND as C, Glyphs } from '@/components/common/BrandGlyphs';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -98,23 +98,25 @@ function OnboardingModal({ visible, onContinue, onClose }: OnboardingModalProps)
 
   const translateY      = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
-  const scale           = useSharedValue(0.96);
 
   const hideModal = useCallback(() => {
     setIsVisible(false);
     onClose();
   }, [onClose]);
 
+  // No spring physics — page-design.md § 9 forbids bounce/spring; tone is calm.
+  // Entrance: 380ms ease-out; exit: 280ms ease-in.
+  const ENTER_EASING = Easing.out(Easing.cubic);
+  const EXIT_EASING  = Easing.in(Easing.cubic);
+
   useEffect(() => {
     if (visible) {
       setIsVisible(true);
-      backdropOpacity.value = withTiming(1, { duration: 350 });
-      translateY.value = withSpring(0, { damping: 50, stiffness: 150, mass: 0.5 });
-      scale.value      = withSpring(1, { damping: 50, stiffness: 150, mass: 0.8 });
+      backdropOpacity.value = withTiming(1, { duration: 280, easing: ENTER_EASING });
+      translateY.value      = withTiming(0, { duration: 380, easing: ENTER_EASING });
     } else if (isVisible) {
-      backdropOpacity.value = withTiming(0, { duration: 300 });
-      scale.value           = withTiming(0.96, { duration: 300 });
-      translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+      backdropOpacity.value = withTiming(0, { duration: 240, easing: EXIT_EASING });
+      translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 280, easing: EXIT_EASING }, (finished) => {
         if (finished) runOnJS(hideModal)();
       });
     }
@@ -123,15 +125,15 @@ function OnboardingModal({ visible, onContinue, onClose }: OnboardingModalProps)
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   const sheetStyle    = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+    transform: [{ translateY: translateY.value }],
   }));
 
   const handleClose = useCallback(() => {
-    backdropOpacity.value = withTiming(0, { duration: 300 });
-    scale.value           = withTiming(0.96, { duration: 300 });
-    translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
+    backdropOpacity.value = withTiming(0, { duration: 240, easing: EXIT_EASING });
+    translateY.value      = withTiming(SCREEN_HEIGHT, { duration: 280, easing: EXIT_EASING }, (finished) => {
       if (finished) runOnJS(hideModal)();
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hideModal]);
 
   if (!isVisible) return null;
@@ -145,45 +147,56 @@ function OnboardingModal({ visible, onContinue, onClose }: OnboardingModalProps)
         </Animated.View>
 
         {/* Sheet */}
-        <Animated.View style={[styles.sheet, sheetStyle, { bottom: 16, paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            sheetStyle,
+            { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+          ]}
+        >
           {/* Handle bar */}
           <View style={styles.handleBar} />
 
           {/* Close button */}
-          <Pressable style={styles.modalClose} onPress={handleClose} hitSlop={8}>
-            <Ionicons name="close" size={22} color="#1A1A1A" />
+          <Pressable style={styles.modalClose} onPress={handleClose} hitSlop={10}>
+            <Glyphs.Close size={18} color={C.ink2} />
           </Pressable>
 
-          {/* Mic icon centered in circle */}
-          <View style={styles.modalIconWrap}>
-            <View style={styles.modalIconCircle}>
-              <Ionicons name="mic-outline" size={44} color="#FFFFFF" />
+          {/* Coral mic disc — soft, contemplative; no WebView orb to avoid mount delay */}
+          <View style={styles.iconWrap}>
+            <View style={styles.iconRing}>
+              <View style={styles.iconCircle}>
+                <Glyphs.Mic size={32} color={C.cream} />
+              </View>
             </View>
           </View>
 
-          {/* Title — "mello" in Playwrite */}
-          <Text style={styles.modalTitle}>
-            {'Send messages to '}
-            <Text style={styles.modalTitleMello}>mello</Text>
-            {'\nusing your voice.'}
+          {/* Kicker */}
+          <Text style={styles.kicker}>— a quieter way</Text>
+
+          {/* Title */}
+          <Text style={styles.title}>
+            Speak to <Text style={styles.titleItalic}>mello</Text>,{'\n'}
+            instead of <Text style={styles.titleItalic}>typing</Text>.
           </Text>
 
-          {/* Feature list */}
+          {/* Feature list — small colored dots, brand-toned */}
           <View style={styles.featureList}>
-            <FeatureRow icon="globe-outline" text="Speak in any language" />
-            <FeatureRow icon="time-outline"  text="Speak for as long as you need" />
-            <FeatureRow icon="flash-outline" text="Chat more quickly and naturally" />
+            <FeatureRow swatch={C.sage}     glyph={<Glyphs.Wave size={14} color={C.ink} />}     text="Speak in any language" />
+            <FeatureRow swatch={C.peach}    glyph={<Glyphs.Moon size={14} color={C.ink} />}     text="Take as long as you need" />
+            <FeatureRow swatch={C.lavender} glyph={<Glyphs.Sparkle size={14} color={C.ink} />}  text="Talk naturally, not in scripts" />
           </View>
 
-          {/* Language row */}
-          <View style={styles.languageRow}>
-            <Text style={styles.languageLabel}>Speech Input Language</Text>
+          {/* Language row — lavender chip-card */}
+          <View style={styles.languageCard}>
+            <Text style={styles.languageLabel}>SPEECH INPUT LANGUAGE</Text>
             <Text style={styles.languageValue}>English</Text>
           </View>
 
-          {/* Continue */}
-          <Pressable style={styles.continueBtn} onPress={onContinue}>
-            <Text style={styles.continueBtnText}>Continue</Text>
+          {/* Pinned CTA — ink pill */}
+          <Pressable style={styles.cta} onPress={onContinue}>
+            <Text style={styles.ctaText}>Begin, gently</Text>
+            <Glyphs.Arrow size={13} color={C.cream} />
           </Pressable>
         </Animated.View>
       </View>
@@ -192,15 +205,19 @@ function OnboardingModal({ visible, onContinue, onClose }: OnboardingModalProps)
 }
 
 function FeatureRow({
-  icon,
+  swatch,
+  glyph,
   text,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  swatch: string;
+  glyph: React.ReactNode;
   text: string;
 }) {
   return (
     <View style={styles.featureRow}>
-      <Ionicons name={icon} size={18} color="rgba(0,0,0,0.5)" style={styles.featureIcon} />
+      <View style={[styles.featureSwatch, { backgroundColor: swatch }]}>
+        {glyph}
+      </View>
       <Text style={styles.featureText}>{text}</Text>
     </View>
   );
@@ -592,7 +609,7 @@ export function useVoiceMic(onTranscript: (text: string) => void) {
 export const MicButton = memo(function MicButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable style={styles.micBtn} onPress={onPress} hitSlop={8}>
-      <Ionicons name="mic-outline" size={28} color="#111111" />
+      <Glyphs.Mic size={26} color={C.ink} />
     </Pressable>
   );
 });
@@ -610,114 +627,162 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // ── Bottom sheet ──────────────────────────────────────────────────────────
-  modalContainer: {
-    flex: 1,
-  },
+
+  // ── Bottom sheet (SelfMind tokens) ────────────────────────────────────
+  modalContainer: { flex: 1 },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(26,31,54,0.42)', // C.ink @ 42%
     zIndex: 998,
   },
   sheet: {
     position: 'absolute',
-    left: 12,
-    right: 12,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 999,
-    borderRadius: 40,
-    backgroundColor: '#F5F3EE',
-    paddingHorizontal: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: C.cream,
+    paddingHorizontal: 24,
+    // Subtle ink shadow — page-design § 4 cards-and-sheets
+    shadowColor: C.ink,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.12,
     shadowRadius: 24,
-    elevation: 24,
+    elevation: 18,
   },
+
   handleBar: {
-    width: 40,
+    width: 44,
     height: 4,
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: C.line,
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 10,
   },
+
   modalClose: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    top: 18,
+    right: 18,
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalIconWrap: {
+
+  // Coral mic disc — quiet brand persona stand-in.
+  iconWrap: {
     alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 24,
+    marginTop: 22,
+    marginBottom: 18,
   },
-  modalIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#b9a6ff',
+  iconRing: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: C.peach,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalTitle: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 22,
-    color: '#1A1A1A',
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: C.coral,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Kicker — em-dash + space prefix per page-design § 4.
+  kicker: {
+    fontFamily: 'JetBrainsMono',
+    fontSize: 11,
+    letterSpacing: 2.2,
+    color: C.ink3,
     textAlign: 'center',
-    lineHeight: 32,
-    marginBottom: 28,
+    textTransform: 'uppercase',
+    marginBottom: 10,
   },
-  modalTitleMello: {
-    fontFamily: 'Playwrite',
-    fontSize: 22,
-    color: '#1A1A1A',
+
+  // Title — Fraunces, lineHeight = fontSize+8 per android-text-cropping rule.
+  title: {
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 26,
+    lineHeight: 34,
+    letterSpacing: -0.2,
+    color: C.ink,
+    textAlign: 'center',
+    marginBottom: 24,
   },
+  titleItalic: { fontFamily: 'Fraunces-MediumItalic' },
+
+  // ── Feature rows ──────────────────────────────────────────────────────
   featureList: {
-    gap: 16,
-    marginBottom: 28,
+    gap: 12,
+    marginBottom: 22,
+    paddingHorizontal: 4,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
   },
-  featureIcon: {},
-  featureText: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 15,
-    color: '#1A1A1A',
+  featureSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  languageRow: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
+  featureText: {
+    flex: 1,
+    fontFamily: 'Fraunces-Text',
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0.15,
+    color: C.ink,
+  },
+
+  // ── Language card ─────────────────────────────────────────────────────
+  languageCard: {
+    backgroundColor: C.lavender,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 18,
   },
   languageLabel: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 12,
-    color: 'rgba(0,0,0,0.45)',
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 9,
+    letterSpacing: 1.6,
+    color: C.lavenderDeep,
     marginBottom: 4,
   },
   languageValue: {
-    fontFamily: 'Outfit-Medium',
+    fontFamily: 'Fraunces-Medium',
     fontSize: 15,
-    color: '#1A1A1A',
+    lineHeight: 21,
+    letterSpacing: -0.05,
+    color: C.ink,
   },
-  continueBtn: {
-    backgroundColor: '#b9a6ff',
-    borderRadius: 30,
+
+  // ── CTA — pinned ink pill ─────────────────────────────────────────────
+  cta: {
+    backgroundColor: C.ink,
+    borderRadius: 999,
     paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  continueBtnText: {
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 16,
-    color: '#ffffff',
+  ctaText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+    color: C.cream,
+    letterSpacing: 0.2,
   },
 });

@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import FloatingTabBar from '@/components/home/FloatingTabBar';
+import SelfMindTabBar from '@/components/home/SelfMindTabBar';
 import { fullscreenStore } from '@/utils/fullscreenStore';
 import { sidebarStore } from '@/utils/sidebarStore';
 import { chatNavStore } from '@/utils/chatNavStore';
@@ -29,7 +29,37 @@ import ChatSidebar from '@/components/chat/ChatSidebar';
 import type { ChatListItem } from '@/services/chat/chatService';
 
 const CONTENT_RADIUS = 28;
-const FULL_SCREEN_ROUTES = new Set(['/breathing']);
+/**
+ * Per the Claude design (mobile-screens-{a,b,c}.jsx), MBTabBar is only
+ * mounted on: MBHome (/home), MBChatHome (/chats), MBPracticeLibrary
+ * (/practice), MBJournalHome (/journal), MBProgress (/mood-history),
+ * MBSettings (/profile). Every other surface is immersive — voice flow,
+ * mid-chat, journal composer/entry, breath/ground/brain practices,
+ * weekly, mood detail, chat archive, notifications.
+ */
+const FULL_SCREEN_ROUTES = new Set([
+  '/breathing',
+  '/chat',
+  '/chat-history',
+  '/call',
+  '/voice-active',
+  '/voice-summary',
+  '/voice-limit',
+  '/journal-entry',
+  '/journal-prompt',
+  '/mood-detail',
+  '/practice',
+  '/box-breath',
+  '/box-breath-summary',
+  '/box-breath-crisis-return',
+  '/tell-someone',
+  '/grounding',
+  '/brain-dump',
+  '/reach-out',
+  '/weekly',
+  '/notifications',
+  '/space',
+]);
 const ANIM_DURATION = 250;
 const ANIM_EASING = Easing.out(Easing.cubic);
 const ANIM_CONFIG = { duration: ANIM_DURATION, easing: ANIM_EASING };
@@ -117,18 +147,43 @@ export default function MainLayout() {
           tabBar={() => null}
           screenOptions={{ headerShown: false }}
         >
+          {/* SelfMind redesign tabs: HOME · VOICE · CHAT · PROFILE.
+              The tab bar (`SelfMindTabBar`) renders its own labels and
+              icons; the `title` here is just for accessibility / default
+              navigator title.
+                /call  — VOICE tab landing (renders SelfMindVoicePre)
+                /chats — CHAT  tab landing (renders SelfMindChatHome) */}
           <Tabs.Screen name="home" options={{ title: 'Home' }} />
-          <Tabs.Screen name="call" options={{ title: 'Call' }} />
-          <Tabs.Screen name="chat" options={{ title: 'Chat' }} />
-          <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+          <Tabs.Screen name="call" options={{ title: 'Voice' }} />
+          <Tabs.Screen name="chats" options={{ title: 'Chat' }} />
+          <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
 
-          {/* Hidden — navigable via router but not in tab bar */}
-          <Tabs.Screen name="chats" options={{ href: null }} />
+          {/* Hidden — navigable via router but not surfaced in the tab bar */}
+          <Tabs.Screen name="chat" options={{ href: null }} />
+          <Tabs.Screen name="chat-history" options={{ href: null }} />
+          <Tabs.Screen name="notifications" options={{ href: null }} />
+          <Tabs.Screen name="voice-active" options={{ href: null }} />
+          <Tabs.Screen name="voice-summary" options={{ href: null }} />
+          <Tabs.Screen name="voice-limit" options={{ href: null }} />
+          <Tabs.Screen name="journal-entry" options={{ href: null }} />
+          <Tabs.Screen name="journal-prompt" options={{ href: null }} />
+          <Tabs.Screen name="mood-detail" options={{ href: null }} />
+          <Tabs.Screen name="practice" options={{ href: null }} />
+          <Tabs.Screen name="weekly" options={{ href: null }} />
+          <Tabs.Screen name="box-breath" options={{ href: null }} />
+          <Tabs.Screen name="box-breath-summary" options={{ href: null }} />
+          <Tabs.Screen name="box-breath-crisis-return" options={{ href: null }} />
+          <Tabs.Screen name="tell-someone" options={{ href: null }} />
+          <Tabs.Screen name="reach-out" options={{ href: null }} />
+          <Tabs.Screen name="grounding" options={{ href: null }} />
+          <Tabs.Screen name="brain-dump" options={{ href: null }} />
           <Tabs.Screen name="mood" options={{ href: null }} />
-          <Tabs.Screen name="profile" options={{ href: null }} />
+          <Tabs.Screen name="settings" options={{ href: null }} />
           <Tabs.Screen name="mood-history" options={{ href: null }} />
           <Tabs.Screen name="journal" options={{ href: null }} />
           <Tabs.Screen name="breathing" options={{ href: null }} />
+          <Tabs.Screen name="spaces" options={{ href: null }} />
+          <Tabs.Screen name="space" options={{ href: null }} />
         </Tabs>
 
         {/* Sidebar — absolute overlay inside contentCard so the tab bar
@@ -152,7 +207,7 @@ export default function MainLayout() {
           style={tabBarAnimStyle}
           pointerEvents={isFullScreen ? 'none' : 'auto'}
         >
-          <FloatingTabBar />
+          <SelfMindTabBar />
         </Animated.View>
       </View>
     </View>

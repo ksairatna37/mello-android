@@ -1,13 +1,21 @@
 /**
- * Mello Animated Splash Screen
- * Displays the "mello" text animation (Apple "hello" style)
- * with DreamyGradient background
- * + Fixed "take a deep breath" text
- * + Random phrase at bottom (picked once on load)
+ * SelfMind Animated Splash — exact match to MBSplash in the Claude Design
+ * mockups (mobile-screens-onboarding.jsx).
+ *
+ * - Cream canvas
+ * - Soft peach ambient field (top-left) and lavender field (bottom-right).
+ *   Faked with react-native-svg RadialGradient circles since RN can't do
+ *   CSS filter: blur(60px).
+ * - Centered stack: 180px breathing orb, Fraunces "selfmind" wordmark
+ *   (italic "mind"), mono kicker "A QUIETER PLACE TO THINK".
+ * - Bottom: thin progress track (animates 0 → 100% during the splash) and
+ *   "SELFMIND · HEALTH" mono label.
+ *
+ * Duration ≈ 2.2s then fades out and calls onComplete().
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Dimensions, Image } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -15,110 +23,113 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-// import LottieView from 'lottie-react-native';
-import DreamyGradient from './DreamyGradient';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+// Splash uses a static PNG, not the WebView orb — splash IS the moment the
+// WebView native module first loads, so we'd race ourselves. The OS-level
+// splash carries the same image so the handoff is seamless.
+const ORB_V2 = require('../../assets/orb-v2.png');
+import { BRAND as C } from './BrandGlyphs';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Random phrases pool (one picked on each load)
-const DYNAMIC_PHRASES = [
-  "you're doing great",
-  "one moment at a time",
-  "be gentle with yourself",
-  "you matter",
-  "you're not alone",
-  "you've got this",
-  "feeling is healing",
-  "you are enough",
-];
+const { width: W, height: H } = Dimensions.get('window');
 
 interface AnimatedSplashProps {
   onComplete: () => void;
 }
 
-export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) => {
-  // const lottieRef = useRef<LottieView>(null);
-  const opacity = useSharedValue(1);
-  const scale = useSharedValue(1);
-  const animationFinished = useRef(false);
-
-  // Pick one random phrase on mount
-  const [randomPhrase] = useState(
-    () => DYNAMIC_PHRASES[Math.floor(Math.random() * DYNAMIC_PHRASES.length)]
+/** Soft gaussian-style blur fake — a radial gradient that fades to transparent. */
+function AmbientField({
+  color,
+  size,
+  opacity,
+  style,
+}: {
+  color: string;
+  size: number;
+  opacity: number;
+  style: { top?: number; left?: number; right?: number; bottom?: number };
+}) {
+  return (
+    <View
+      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size, opacity }, style]}
+    >
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        <Defs>
+          <RadialGradient id={`amb-${color}`} cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor={color} stopOpacity="1" />
+            <Stop offset="55%" stopColor={color} stopOpacity="0.6" />
+            <Stop offset="100%" stopColor={color} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx="50" cy="50" r="50" fill={`url(#amb-${color})`} />
+      </Svg>
+    </View>
   );
+}
 
-  // Called when Lottie animation finishes (now triggered by useEffect timer)
-  const handleAnimationFinish = () => {
-    if (animationFinished.current) return; // Prevent double trigger
-    animationFinished.current = true;
-
-    console.log('>>> Lottie animation finished, waiting 2 seconds...');
-
-    // Subtle scale up
-    scale.value = withTiming(1.05, {
-      duration: 800,
-      easing: Easing.out(Easing.ease),
-    });
-
-    // Wait 2 seconds, then fade out and redirect
-    setTimeout(() => {
-      console.log('>>> Starting fade out...');
-      opacity.value = withTiming(
-        0,
-        { duration: 500, easing: Easing.out(Easing.ease) },
-        (finished) => {
-          if (finished) {
-            console.log('>>> Fade complete, redirecting...');
-            runOnJS(onComplete)();
-          }
-        }
-      );
-    }, 2000);
-  };
+export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) => {
+  const opacity = useSharedValue(1);
+  const progress = useSharedValue(0);
+  const finishedRef = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(handleAnimationFinish, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+    // Splash lives for ~4.2s so it can actually be appreciated, then fades.
+    progress.value = withTiming(1, { duration: 3800, easing: Easing.out(Easing.cubic) });
 
-  const containerStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
+    const t = setTimeout(() => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      opacity.value = withTiming(
+        0,
+        { duration: 550, easing: Easing.out(Easing.cubic) },
+        (done) => { if (done) runOnJS(onComplete)(); },
+      );
+    }, 4200);
 
+    return () => clearTimeout(t);
+  }, [onComplete, opacity, progress]);
+
+  const containerStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
 
   return (
     <Animated.View style={[styles.container, containerStyle]}>
-      {/* Dreamy gradient background with floating clouds & particles */}
-      <DreamyGradient />
+      {/* Soft ambient color fields — peach top-left, lavender bottom-right */}
+      <AmbientField
+        color={C.peach}
+        size={280}
+        opacity={0.55}
+        style={{ top: -80, left: -60 }}
+      />
+      <AmbientField
+        color={C.lavender}
+        size={300}
+        opacity={0.45}
+        style={{ bottom: -100, right: -80 }}
+      />
 
-      {/* SelfMind title */}
-      <View style={styles.lottieContainer}>
-        <Text style={styles.SelfMindText}>SelfMind</Text>
-      </View>
-
-      {/* Apple-style "hello" Lottie animation — commented out for SelfMind rebrand */}
-      {/* <View style={styles.lottieContainer}>
-        <LottieView
-          ref={lottieRef}
-          source={require('@/assets/animations/mello-hello.json')}
-          style={styles.lottie}
-          autoPlay={false}
-          loop={false}
-          speed={1}
+      {/* Centered stack: orb + wordmark + kicker */}
+      <View style={styles.center}>
+        <Image
+          source={ORB_V2}
+          style={{ width: 350, height: 350 }}
           resizeMode="contain"
-          onAnimationFinish={handleAnimationFinish}
+          fadeDuration={0}
         />
-      </View> */}
-
-      {/* Fixed "take a deep breath" text */}
-      <View style={styles.breatheContainer}>
-        <Text style={styles.breatheText}>take a deep breath</Text>
+        <View style={styles.textStack}>
+          <Text style={styles.wordmark}>
+            self<Text style={styles.wordmarkItalic}>mind</Text>
+          </Text>
+          <Text style={styles.kicker}>A QUIETER PLACE TO THINK</Text>
+        </View>
       </View>
 
-      {/* Random phrase at bottom */}
-      <View style={styles.phraseContainer}>
-        <Text style={styles.phraseText}>{randomPhrase}</Text>
+      {/* Bottom: progress track + company mark */}
+      <View style={styles.bottom}>
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressFill, progressStyle]} />
+        </View>
+        <Text style={styles.company}>SELFMIND · HEALTH</Text>
       </View>
     </Animated.View>
   );
@@ -126,47 +137,60 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({ onComplete }) =>
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  lottieContainer: {
     ...StyleSheet.absoluteFillObject,
+    width: W,
+    height: H,
+    backgroundColor: C.cream,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
   },
-  lottie: {
-    width: SCREEN_WIDTH * 0.7,
-    height: SCREEN_HEIGHT * 0.35,
+  center: { alignItems: 'center', gap: 32, width: '100%' },
+  textStack: { width: '100%', alignItems: 'center' },
+  // Wordmark: full screen width + textAlign center. No shrink-wrap box, no
+  // italic-overhang clipping. includeFontPadding:false kills Android's
+  // default ascender/descender padding that can crop from the top.
+  wordmark: {
+    width: '100%',
+    fontFamily: 'Fraunces-XL',
+    fontSize: 64,
+    lineHeight: 76,
+    color: C.ink,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
-  SelfMindText: {
-    fontSize: 48,
-    fontFamily: 'DMSerif',
-    color: 'rgba(255, 255, 255, 0.95)',
-    letterSpacing: 1.5,
+  wordmarkItalic: { fontFamily: 'Fraunces-XL-Italic' },
+  kicker: {
+    marginTop: 14,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
+    letterSpacing: 1.8,
+    color: C.ink3,
   },
-  breatheContainer: {
+  bottom: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 56,
     left: 0,
     right: 0,
     alignItems: 'center',
+    gap: 10,
   },
-  breatheText: {
-    fontSize: 16,
-    fontFamily: 'Outfit-Medium',
-    color: 'rgba(255, 255, 255, 0.85)',
-    letterSpacing: 1,
+  progressTrack: {
+    width: 56,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(26,31,54,0.12)',
+    overflow: 'hidden',
   },
-  phraseContainer: {
-    position: 'absolute',
-    bottom: 60,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
+  progressFill: {
+    height: 3,
+    backgroundColor: C.ink,
+    borderRadius: 2,
   },
-  phraseText: {
-    fontSize: 14,
-    fontFamily: 'Outfit-Regular',
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.5,
+  company: {
+    fontFamily: 'JetBrainsMono',
+    fontSize: 9,
+    letterSpacing: 1.4,
+    color: C.ink3,
   },
 });

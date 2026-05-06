@@ -31,6 +31,24 @@ export interface ProfileData {
   updated_at?: string;
   referral_code?: string | null;
   referral_count?: number;
+  /** Single JSON column on `profiles` carrying the user-tunable PROFILE
+   *  tab preferences (pronouns / age / voice / memory / check-in times
+   *  / therapist style). See `MelloUserPreferences` for the agreed
+   *  template. May be null on never-edited rows. */
+  mello_user_preferences?: MelloUserPreferences | null;
+}
+
+/* JSON template for `profiles.mello_user_preferences`. Snake_case keys
+ * to match other table-column conventions. All fields optional — only
+ * present after the user has actually set them via the PROFILE tab. */
+export interface MelloUserPreferences {
+  pronouns?: 'he/him' | 'she/her' | 'they/them' | 'prefer-not-to-say';
+  age_range?: '13-17' | '18-21' | '22-25' | '26-34' | '35-44' | '45-plus';
+  voice?: 'english' | 'hindi';
+  memory_enabled?: boolean;
+  check_in_times?: ReadonlyArray<string>;
+  therapist_style?: 'soft-slow' | 'clear-direct' | 'bit-playful';
+  updated_at?: string;
 }
 
 // Signup
@@ -246,6 +264,39 @@ export interface JournalEntryResponse {
 // PROFILE TYPES
 // ═══════════════════════════════════════════════════
 
+/* ─── Practice page persistence (profile columns) ───────────────────
+ * Backed by columns added to public.profiles:
+ *   practice_liked         text[]  — array of practice ids hearted
+ *   practice_stats         jsonb   — per-practice counters (read-modify-write)
+ *   practice_last_used_at  jsonb   — per-practice last-opened ISO string
+ *   practice_ui_hints      jsonb   — one-time UI hint flags (replaces AsyncStorage)
+ *
+ * All four are NOT NULL with default '{}' / '{}'::jsonb on the server,
+ * so the app never has to handle nulls — but we type them optional
+ * here for safety against older row snapshots. */
+
+/** Per-practice counter shape stored under practice_stats[<practiceId>]. */
+export interface PracticeCounters {
+  /** Total completed sessions for this practice. */
+  totalSessions?: number;
+  /** Box-breath specific — total cycles across all sessions. */
+  totalCycles?: number;
+  /** Last session's cycles, for the post-session UI to read back. */
+  lastCycles?: number;
+  /** Last session's elapsed seconds. */
+  lastSecs?: number;
+  /** Brain-dump specific — total thoughts captured across all opens. */
+  thoughtsAdded?: number;
+  /** Free-form extension surface — practice-specific keys can be
+   *  added without touching the type, but prefer adding a typed
+   *  field above for grep-ability. */
+  [key: string]: unknown;
+}
+
+export type PracticeStatsMap = Record<string, PracticeCounters>;
+export type PracticeLastUsedAtMap = Record<string, string>;
+export type PracticeUiHintsMap = Record<string, boolean>;
+
 export interface ProfileResponse extends ProfileData {
   mello_user_preferences?: Record<string, unknown> | null;
   twitter_connected?: boolean | null;
@@ -260,6 +311,11 @@ export interface ProfileResponse extends ProfileData {
   wallet_connected?: boolean;
   wallet_points_received?: boolean;
   internal_access?: boolean | null;
+  /* Practice persistence — see block comment above. */
+  practice_liked?: string[];
+  practice_stats?: PracticeStatsMap;
+  practice_last_used_at?: PracticeLastUsedAtMap;
+  practice_ui_hints?: PracticeUiHintsMap;
 }
 
 export interface UpdateProfileRequest {
@@ -267,6 +323,14 @@ export interface UpdateProfileRequest {
   avatar_url?: string;
   first_login?: boolean;
   mello_user_preferences?: Record<string, unknown>;
+  /* Practice persistence — partial PATCH allowed; unspecified fields
+   * are untouched server-side. PATCH semantics on jsonb columns
+   * REPLACE the whole value, so callers must read-modify-write the
+   * stats / last-used / hints maps locally before sending. */
+  practice_liked?: string[];
+  practice_stats?: PracticeStatsMap;
+  practice_last_used_at?: PracticeLastUsedAtMap;
+  practice_ui_hints?: PracticeUiHintsMap;
   // Add other writable fields as needed
 }
 

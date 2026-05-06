@@ -1,57 +1,96 @@
 /**
- * FadingScrollView Component
- * Wraps ScrollView content in a MaskedView so the CONTENT itself
- * fades to transparent at scroll edges - like the reference app.
+ * FadingScrollWrapper — overlay-gradient edge fade.
  *
- * The content blurs/fades out naturally, background shows through.
+ * Implementation history (so future-you doesn't reopen settled debates):
+ *
+ *   v1 — `@react-native-masked-view/masked-view` with a luminance-mask
+ *        gradient. Zero-config (the screen's bg shows through naturally),
+ *        but Android-broken: during native-stack back transitions
+ *        react-native-screens recomposites the outgoing screen and the
+ *        mask bleeds through as a dark gradient over the scroll body.
+ *
+ *   v1a — same MaskedView with `androidRenderingMode="software"`.
+ *        Documented workaround in masked-view PR #127. Verified on this
+ *        codebase: the dark scrim still appears AND adds noticeable lag
+ *        on lower-end Android. Not a viable path.
+ *
+ *   v2 (current) — two absolute LinearGradients painting `bg → transparent`
+ *        on top of the content. No native masking, no transition artifact,
+ *        no lag. Cost: the wrapper needs to know the screen's bg color so
+ *        the gradient blends cleanly. Default is `BRAND.cream`, which is
+ *        the canvas for the vast majority of screens. The ~3 non-cream
+ *        screens (peach name-input, peach welcome-aboard, tonal
+ *        QuestionPage) pass `bg={C.peach}` etc.
  */
 
-import React, { useState } from 'react';
+import React, { ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
-import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BRAND } from '@/components/common/BrandGlyphs';
 
 interface FadingScrollWrapperProps {
-  children: React.ReactNode;
+  children: ReactNode;
   topFadeHeight?: number;
   bottomFadeHeight?: number;
+  /** Screen background — used for both edges if `topBg`/`bottomBg` aren't
+   *  set. Defaults to BRAND.cream (the common case). */
+  bg?: string;
+  /** Top-edge color override. Use when the top of the screen has a tone
+   *  wash (peach, sage, lavender, butter) and the bottom is plain cream
+   *  — passing `bg` alone would tint one edge wrong. */
+  topBg?: string;
+  /** Bottom-edge color override. Same intent as `topBg`. */
+  bottomBg?: string;
+}
+
+/** Convert `#RRGGBB` (or `#RRGGBBAA`) to the same RGB with alpha = 00. */
+function transparent(hex: string): string {
+  if (hex.startsWith('#') && hex.length === 9) return hex.slice(0, 7) + '00';
+  if (hex.startsWith('#') && hex.length === 7) return hex + '00';
+  if (hex.startsWith('#') && hex.length === 4) {
+    const r = hex[1], g = hex[2], b = hex[3];
+    return `#${r}${r}${g}${g}${b}${b}00`;
+  }
+  return 'rgba(0,0,0,0)';
 }
 
 export const FadingScrollWrapper = ({
   children,
   topFadeHeight = 50,
   bottomFadeHeight = 80,
+  bg = BRAND.cream,
+  topBg,
+  bottomBg,
 }: FadingScrollWrapperProps) => {
-  const [height, setHeight] = useState(800);
-
-  const topStop = Math.min(topFadeHeight / height, 0.15);
-  const bottomStop = Math.max(1 - bottomFadeHeight / height, 0.85);
+  const top = topBg ?? bg;
+  const bottom = bottomBg ?? bg;
+  const topFade = transparent(top);
+  const bottomFade = transparent(bottom);
 
   return (
-    <MaskedView
-      style={styles.container}
-      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-      maskElement={
-        <LinearGradient
-          colors={['transparent', 'black', 'black', 'transparent']}
-          locations={[0, topStop, bottomStop, 1]}
-          style={styles.maskContainer}
-        />
-      }
-    >
+    <View style={styles.wrap}>
       {children}
-    </MaskedView>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[top, topFade]}
+        style={[styles.edge, { top: 0, height: topFadeHeight }]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={[bottomFade, bottom]}
+        style={[styles.edge, { bottom: 0, height: bottomFadeHeight }]}
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  maskContainer: {
-    flex: 1,
+  wrap: { flex: 1 },
+  edge: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
 });
 
-// Keep backward-compatible default export
 export default FadingScrollWrapper;

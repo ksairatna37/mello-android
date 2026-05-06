@@ -1,21 +1,15 @@
 /**
- * Journal Tab (hidden - navigated from Home)
+ * Journal Tab — SelfMind redesign.
+ *
+ * Renders the journal index wired to /rest/v1/journal_entries via
+ * services/journal/journalService. Hidden from the tab bar — reached
+ * from Home's "Journal prompt" card today, and from PROFILE later
+ * when the journal entry-detail screen lands.
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import JournalScreen from '@/components/journal/JournalScreen';
+import SelfMindJournalHome from '@/components/journal/SelfMindJournalHome';
 
 export default function JournalTab() {
-  return (
-    <View style={styles.container}>
-      <JournalScreen />
-    </View>
-  );
+  return <SelfMindJournalHome />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});

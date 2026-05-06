@@ -13,6 +13,7 @@ export default ({ config }) => ({
     livekitApiUrl: process.env.LIVEKIT_API_URL,
     awsBedrockRegion: process.env.AWS_BEDROCK_REGION,
     awsBedrockModelArn: process.env.AWS_BEDROCK_MODEL_ARN,
+    awsBedrockHaikuModelId: process.env.AWS_BEDROCK_HAIKU_MODEL_ID,
 
     // ─── SENSITIVE: embedded in bundle — see security note below ─────────────
     // These should ideally be moved to a server-side proxy. Until then, they

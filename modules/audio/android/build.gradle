@@ -2,7 +2,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'maven-publish'
 
-group = 'expo.modules.audio'
+group = 'com.selfmind.audio'
 version = '0.1.0'
 
 buildscript {
@@ -29,7 +29,7 @@ afterEvaluate {
 }
 
 android {
-  namespace "expo.modules.audio"
+  namespace "com.selfmind.audio"
 
   compileSdkVersion safeExtGet("compileSdkVersion", 34)
 

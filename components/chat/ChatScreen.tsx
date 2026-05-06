@@ -26,6 +26,7 @@ import {
   Pressable,
   StyleSheet,
   FlatList,
+  RefreshControl,
   KeyboardAvoidingView,
   Platform,
   Share,
@@ -44,9 +45,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { CARD_SHADOW } from '@/components/common/LightGradient';
+import { Glyphs, BRAND as C, RADIUS } from '@/components/common/BrandGlyphs';
 import { fullscreenStore } from '@/utils/fullscreenStore';
 import { sidebarStore } from '@/utils/sidebarStore';
 import { chatNavStore } from '@/utils/chatNavStore';
+import { crisisResumeStore } from '@/utils/crisisResumeStore';
+import { crisisContextStore } from '@/utils/crisisContextStore';
+import {
+  recordCrisisFlowEvent,
+  SCOPE_CRISIS_FLOW,
+  clearScope,
+} from '@/services/chat/liveContextInjection';
+import { generateChatSuggestions } from '@/services/chat/bedrockService';
+import SuggestionChips from './SuggestionChips';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TypewriterText from './TypewriterText';
 import LoadingDots from './LoadingDots';
 import { MicButton, RecordingBar, OnboardingModal, useVoiceMic } from './VoiceMicButton';
@@ -72,8 +84,18 @@ import {
   type ChatFeedback,
 } from '@/services/chat/chatService';
 import RenameChatSheet from './RenameChatSheet';
+import SelfMindChatCrisis from './SelfMindChatCrisis';
 import DeleteChatSheet from './DeleteChatSheet';
+import {
+  isChatSaved,
+  saveChatAsEntry,
+  unsaveChatEntry,
+} from '@/services/journal/journalService';
+import { pickChatGreetingTitle } from '@/services/chat/chatGreetingTitles';
+import { pickChatGreetingChips } from '@/services/chat/chatGreetingChips';
 import { getSession } from '@/services/auth';
+import { useAuth } from '@/contexts/AuthContext';
+import { getOnboardingData } from '@/utils/onboardingStorage';
 import { supabase } from '@/lib/supabase';
 
 // Re-export for sidebar
@@ -94,21 +116,24 @@ interface Message {
 // CONSTANTS / HELPERS
 // ═══════════════════════════════════════════════════
 
+/** Marketing-screenshot helper. Flip to `true` to expose a "Demo" item
+ *  in the chat kebab menu that loads a canned 2-message exchange. Off
+ *  in shipped builds. */
+const SHOW_SCREENSHOT_DEMO = false;
+
+/* AsyncStorage key for the chat suggestions toggle. Module-scope so
+ * future call sites (settings screen, debug panel) reference the
+ * same string without retyping it. Stored values:
+ *   '0' — explicitly OFF (user disabled it)
+ *   '1' / unset — ON (default for first-run + existing users) */
+const SUGGESTIONS_STORAGE_KEY = '@selfmind:chatSuggestionsOn';
+
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
-  text: "Hey! I'm Mello. I'm here whenever you want to talk, vent, or just think out loud. What's on your mind?",
+  text: "I'm here whenever you want to talk, vent, or just think out loud — what's on your mind?",
   isUser: false,
   timestamp: new Date(),
 };
-
-function getTimeGreeting(): string {
-  const h = new Date().getHours();
-  if (h >= 5 && h < 12) return 'this morning?';
-  if (h >= 12 && h < 17) return 'this afternoon?';
-  if (h >= 17 && h < 21) return 'this evening?';
-  return 'tonight?';
-}
-
 
 function isNewMessage(id: string): boolean {
   return !id.startsWith('stored_') && id !== 'welcome';
@@ -130,6 +155,10 @@ interface MessageItemProps {
   onCopy: (text: string) => void;
   onLike: (id: string) => void;
   onDislike: (id: string) => void;
+  /** Chat-level feedback. Drives the active-state of the thumbs
+   *  icons under every AI bubble (the feedback applies to the chat,
+   *  not per-message — same behavior the old design had). */
+  feedback: ChatFeedback;
 }
 
 const ChatMessageItem = memo(function ChatMessageItem({
@@ -140,6 +169,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
   onCopy,
   onLike,
   onDislike,
+  feedback,
 }: MessageItemProps) {
   const translateX = useSharedValue(isNew ? (item.isUser ? 24 : -24) : 0);
   const opacity = useSharedValue(isNew ? 0 : 1);
@@ -181,9 +211,12 @@ const ChatMessageItem = memo(function ChatMessageItem({
     );
   }
 
+  // AI bubble — MBChatMid lavender card with asymmetric top-left
+  // corner. Action row sits BELOW the bubble (not inside) so it doesn't
+  // clutter the rounded corner.
   return (
     <Animated.View style={[styles.rowAI, animStyle]}>
-      <View style={styles.aiContent}>
+      <View style={styles.aiBubble}>
         {showTypewriter ? (
           <TypewriterText
             text={displayText}
@@ -194,29 +227,33 @@ const ChatMessageItem = memo(function ChatMessageItem({
         ) : (
           <Text style={styles.aiText}>{displayText}</Text>
         )}
-        {!showTypewriter && (
-          <View style={styles.actionRow}>
-            <Animated.View style={copyStyle}>
-              <Pressable style={styles.actionBtn} hitSlop={8}
-                onPress={() => { tapScale(copyScale); onCopy(displayText); }}>
-                <Ionicons name="copy-outline" size={15} color="rgba(0,0,0,0.35)" />
-              </Pressable>
-            </Animated.View>
-            <Animated.View style={likeStyle}>
-              <Pressable style={styles.actionBtn} hitSlop={8}
-                onPress={() => { tapScale(likeScale); onLike(item.id); }}>
-                <Ionicons name="thumbs-up-outline" size={15} color="rgba(0,0,0,0.35)" />
-              </Pressable>
-            </Animated.View>
-            <Animated.View style={dislikeStyle}>
-              <Pressable style={styles.actionBtn} hitSlop={8}
-                onPress={() => { tapScale(dislikeScale); onDislike(item.id); }}>
-                <Ionicons name="thumbs-down-outline" size={15} color="rgba(0,0,0,0.35)" />
-              </Pressable>
-            </Animated.View>
-          </View>
-        )}
       </View>
+      {!showTypewriter && (
+        <View style={styles.actionRow}>
+          <Animated.View style={copyStyle}>
+            <Pressable style={styles.actionBtn} hitSlop={8}
+              onPress={() => { tapScale(copyScale); onCopy(displayText); }}>
+              <Ionicons name="copy-outline" size={15} color={C.ink3} />
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={likeStyle}>
+            <Pressable style={styles.actionBtn} hitSlop={8}
+              onPress={() => { tapScale(likeScale); onLike(item.id); }}>
+              {feedback === 'liked'
+                ? <Glyphs.ThumbUpFilled size={15} color={C.coral} />
+                : <Glyphs.ThumbUp size={15} color={C.ink3} />}
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={dislikeStyle}>
+            <Pressable style={styles.actionBtn} hitSlop={8}
+              onPress={() => { tapScale(dislikeScale); onDislike(item.id); }}>
+              {feedback === 'disliked'
+                ? <Glyphs.ThumbDownFilled size={15} color={C.coral} />
+                : <Glyphs.ThumbDown size={15} color={C.ink3} />}
+            </Pressable>
+          </Animated.View>
+        </View>
+      )}
     </Animated.View>
   );
 });
@@ -228,24 +265,43 @@ const ChatMessageItem = memo(function ChatMessageItem({
 interface ContextMenuProps {
   chatTitle: string;
   isStarred: boolean;
+  isSavedToJournal: boolean;
+  canSaveToJournal: boolean;
+  /** Suggestion-chip toggle state — current value (lit when on). */
+  suggestionsOn: boolean;
   onRename: () => void;
   onStar: () => void;
+  onSaveToJournal: () => void;
   onDelete: () => void;
   onNewChat: () => void;
+  onToggleSuggestions: () => void;
+  onLoadDemo: () => void;
   onClose: () => void;
 }
 
+/**
+ * Chat kebab menu — rebuilt with Claude tokens.
+ *   - Card: paper + line, RADIUS.card, soft shadow.
+ *   - Header block: `— this thread` kicker + Fraunces title.
+ *   - Hairline divider between header and items.
+ *   - Rows: label left (Inter), brand-glyph right; cream2 wash on press.
+ *   - Save row's heart fills coral when saved (matches the global
+ *     SavePracticeButton pattern on practice screens).
+ *   - Delete row gets coral text + trash glyph.
+ *   - Star row gets a filled star when starred.
+ */
 const ContextMenu = memo(function ContextMenu({
-  chatTitle, isStarred, onRename, onStar, onDelete, onNewChat, onClose,
+  chatTitle, isStarred, isSavedToJournal, canSaveToJournal, suggestionsOn,
+  onRename, onStar, onSaveToJournal, onDelete, onNewChat, onToggleSuggestions, onLoadDemo, onClose,
 }: ContextMenuProps) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-8);
   const scale = useSharedValue(0.95);
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 160 });
-    translateY.value = withTiming(0, { duration: 160, easing: Easing.out(Easing.quad) });
-    scale.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) });
+    opacity.value = withTiming(1, { duration: 180 });
+    translateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) });
+    scale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
   }, []);
 
   const menuStyle = useAnimatedStyle(() => ({
@@ -257,39 +313,115 @@ const ContextMenu = memo(function ContextMenu({
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <Animated.View style={[styles.contextMenu, menuStyle]}>
-        <Text style={styles.contextMenuTitle}>{chatTitle}</Text>
+        {/* Header block — kicker + chat title. Reads as a soft label,
+            not a settings header. */}
+        <View style={styles.contextMenuHeader}>
+          <Text style={styles.contextMenuKicker}>— this thread</Text>
+          <Text style={styles.contextMenuTitleNew} numberOfLines={2}>
+            {chatTitle || 'New chat'}
+          </Text>
+        </View>
+
         <View style={styles.contextMenuDivider} />
-        <ContextMenuItem icon="pencil-outline" label="Rename" onPress={onRename} />
-        <ContextMenuItem icon={isStarred ? 'star' : 'star-outline'} label={isStarred ? 'Starred' : 'Star'} onPress={onStar} />
-        <ContextMenuItem icon="home-outline" label="Add to home" onPress={() => {}} />
-        <ContextMenuItem icon="trash-outline" label="Delete" onPress={onDelete} danger />
-        <ContextMenuItem icon="add-circle-outline" label="New chat" onPress={onNewChat} />
+
+        <ContextMenuItem
+          icon={<Glyphs.Pencil size={17} color={C.ink2} />}
+          label="Rename"
+          onPress={onRename}
+        />
+        <ContextMenuItem
+          icon={
+            isStarred
+              ? <Glyphs.StarFilled size={17} color={C.coral} />
+              : <Glyphs.Star size={17} color={C.ink2} />
+          }
+          label={isStarred ? 'Starred' : 'Star'}
+          onPress={onStar}
+          accent={isStarred ? 'coral' : undefined}
+        />
+        {canSaveToJournal && (
+          <ContextMenuItem
+            icon={
+              isSavedToJournal
+                ? <Glyphs.HeartFilled size={17} color={C.coral} />
+                : <Glyphs.Heart size={17} color={C.ink2} />
+            }
+            label={isSavedToJournal ? 'Saved to journal' : 'Save to journal'}
+            onPress={onSaveToJournal}
+            accent={isSavedToJournal ? 'coral' : undefined}
+          />
+        )}
+        <ContextMenuItem
+          icon={<Glyphs.Plus size={17} color={C.ink2} />}
+          label="New chat"
+          onPress={onNewChat}
+        />
+        <ContextMenuItem
+          icon={
+            suggestionsOn
+              ? <Glyphs.Sparkle size={17} color={C.coral} />
+              : <Glyphs.Sparkle size={17} color={C.ink2} />
+          }
+          label={suggestionsOn ? 'Suggestions on' : 'Suggestions off'}
+          onPress={onToggleSuggestions}
+          accent={suggestionsOn ? 'coral' : undefined}
+        />
+        <ContextMenuItem
+          icon={<Glyphs.Trash size={17} color={C.coral} />}
+          label="Delete"
+          onPress={onDelete}
+          danger
+        />
+        {SHOW_SCREENSHOT_DEMO && (
+          <ContextMenuItem
+            icon={<Ionicons name="camera-outline" size={17} color={C.ink2} />}
+            label="Demo (for screenshot)"
+            onPress={onLoadDemo}
+          />
+        )}
       </Animated.View>
     </>
   );
 });
 
 function ContextMenuItem({
-  icon, label, onPress, danger = false,
+  icon, label, onPress, danger = false, accent,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: React.ReactNode;
   label: string;
   onPress: () => void;
   danger?: boolean;
+  accent?: 'coral';
 }) {
   const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const bgPressed = useSharedValue(0);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    backgroundColor: bgPressed.value > 0 ? C.cream2 : 'transparent',
+  }));
 
   return (
-    <Animated.View style={animStyle}>
+    <Animated.View style={[styles.contextMenuRowWrap, animStyle]}>
       <Pressable
         style={styles.contextMenuRow}
         onPress={onPress}
-        onPressIn={() => { scale.value = withTiming(0.97, { duration: 80 }); }}
-        onPressOut={() => { scale.value = withTiming(1, { duration: 100 }); }}
+        onPressIn={() => {
+          scale.value = withTiming(0.98, { duration: 80 });
+          bgPressed.value = withTiming(1, { duration: 80 });
+        }}
+        onPressOut={() => {
+          scale.value = withTiming(1, { duration: 120 });
+          bgPressed.value = withTiming(0, { duration: 120 });
+        }}
       >
-        <Text style={[styles.contextMenuLabel, danger && styles.contextMenuDanger]}>{label}</Text>
-        <Ionicons name={icon} size={18} color={danger ? '#EF4444' : 'rgba(0,0,0,0.5)'} />
+        <Text style={[
+          styles.contextMenuLabel,
+          danger && styles.contextMenuDanger,
+          accent === 'coral' && styles.contextMenuAccentCoral,
+        ]}>
+          {label}
+        </Text>
+        {icon}
       </Pressable>
     </Animated.View>
   );
@@ -309,12 +441,160 @@ export default function ChatScreen() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
+  const [isSavedToJournal, setIsSavedToJournal] = useState(false);
+  /* The persisted Chat.type for the currently-loaded thread. Used so
+   * Save-to-journal records the right chat_type ('textchat' | 'voicechat')
+   * — otherwise we'd always tag as 'textchat'. */
+  const [chatType, setChatType] = useState<'textchat' | 'voicechat'>('textchat');
+  const [refreshing, setRefreshing] = useState(false);
+  /* When crisis is detected we save the user's message to the
+   * conversation but DO NOT call Bedrock yet — we hold the response
+   * here until the user picks Continue Chatting. View Resources
+   * clears it (the user changed surfaces; no chatter at them). */
+  const [pendingAI, setPendingAI] = useState<null | {
+    chatId: string | null;
+    conversation: ChatMessage[];
+    withUser: Message[];
+  }>(null);
   const [isIncognito, setIsIncognito] = useState(false);
+
+  /* Display name for the chat agent's user-preference addendum.
+   * Server-side `profiles.username` wins; falls back to local
+   * onboarding `firstName`. Stored in a ref so reads at send time
+   * are sync. Refreshed on focus + auth profile change. */
+  const { state: authState } = useAuth();
+  const userNameRef = useRef<string | null>(null);
+  useEffect(() => {
+    const fromProfile =
+      authState.kind === 'authed' ? authState.profile?.username?.trim() ?? null : null;
+    if (fromProfile) {
+      userNameRef.current = fromProfile;
+      return;
+    }
+    let cancelled = false;
+    getOnboardingData()
+      .then((d) => {
+        if (cancelled) return;
+        const local = d.firstName?.trim();
+        if (local) userNameRef.current = local;
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authState]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chatTitle, setChatTitle] = useState('New chat');
+  const [chatGreetingTitle, setChatGreetingTitle] = useState("What's floating around?");
+  const [chatGreetingChips, setChatGreetingChips] = useState<string[]>([
+    "i'm anxious",
+    "can't sleep",
+    'need to vent',
+    'just checking in',
+  ]);
   const [userEmail, setUserEmail] = useState('');
+
+  /* "Suggestion on" feature: when enabled, a 2–4 chip strip of predicted
+   * next user messages appears below the latest AI reply. Default ON;
+   * toggle lives in the context menu (ellipsis) so users can flip it
+   * mid-conversation. Persisted globally via AsyncStorage so it survives
+   * across threads + app launches. Suggestions themselves are cached
+   * per-message-id (latest AI message only — older replies' chips
+   * become stale once the conversation moves on). */
+  const [suggestionsOn, setSuggestionsOn] = useState(true);
+  const [renderSuggestionsUi, setRenderSuggestionsUi] = useState(true);
+  const [suggestionsByMsgId, setSuggestionsByMsgId] = useState<Record<string, string[]>>({});
+  const [suggestionsLoadingFor, setSuggestionsLoadingFor] = useState<string | null>(null);
+  const suggestionUiOpacity = useSharedValue(1);
+
+  /* Restore persisted toggle on mount. Stored values:
+   *   '0' → explicitly OFF (user disabled it)
+   *   '1' or unset → ON (default for first-run users and existing users)
+   * Failure is non-fatal — default ON stays. */
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(SUGGESTIONS_STORAGE_KEY)
+      .then((v) => { if (!cancelled && v === '0') setSuggestionsOn(false); })
+      .catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Refs mirror the toggle + loading-target so `runAIStep` (which
+   * runs detached) can read the latest values without depending on
+   * them in its useCallback deps (which would otherwise re-bind it
+   * on every state change and break the held-reply path). */
+  const suggestionsOnRef = useRef(suggestionsOn);
+  const suggestionsLoadingForRef = useRef<string | null>(null);
+  /* AbortController for the in-flight suggestion fetch. Aborted on
+   * every reset path (new send, new chat, incognito toggle, history
+   * load, suggestions toggle off, unmount) so a stale Bedrock call
+   * can't burn tokens for ten seconds while the user has moved on. */
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
+  /** Cancel the current in-flight chip fetch and clear all chip
+   *  state. Safe to call repeatedly (idempotent). */
+  const resetSuggestionState = useCallback(() => {
+    suggestionsAbortRef.current?.abort();
+    suggestionsAbortRef.current = null;
+    setSuggestionsByMsgId({});
+    setSuggestionsLoadingFor(null);
+  }, []);
+  useEffect(() => { suggestionsOnRef.current = suggestionsOn; }, [suggestionsOn]);
+  useEffect(() => { suggestionsLoadingForRef.current = suggestionsLoadingFor; }, [suggestionsLoadingFor]);
+
+  const toggleSuggestions = useCallback(() => {
+    setSuggestionsOn((prev) => {
+      const next = !prev;
+      console.log('[ChatScreen] suggestions ' + (next ? 'ON' : 'OFF'));
+      AsyncStorage.setItem(SUGGESTIONS_STORAGE_KEY, next ? '1' : '0').catch(() => { /* ignore */ });
+      /* Turning off clears cache + aborts any in-flight fetch so
+       * we don't render stale chips if the user flips it back on
+       * later in the same thread, and we don't burn tokens on a
+       * fetch the user just opted out of. */
+      if (!next) resetSuggestionState();
+      return next;
+    });
+  }, [resetSuggestionState]);
+
+  const handleTurnOffSuggestions = useCallback(() => {
+    if (suggestionsOn) toggleSuggestions();
+  }, [suggestionsOn, toggleSuggestions]);
+
+  useEffect(() => {
+    if (suggestionsOn) {
+      setRenderSuggestionsUi(true);
+      suggestionUiOpacity.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
+      return;
+    }
+
+    suggestionUiOpacity.value = withTiming(
+      0,
+      { duration: 180, easing: Easing.out(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(setRenderSuggestionsUi)(false);
+      },
+    );
+  }, [suggestionsOn, suggestionUiOpacity]);
+
+  const suggestionFadeStyle = useAnimatedStyle(() => ({
+    opacity: suggestionUiOpacity.value,
+  }));
+
+  /* Tap handler for any suggestion chip — fires send immediately
+   * (no round-trip through the input pill).
+   *
+   * Indirection via `handleSendRef` because `handleSend` is declared
+   * lower in the component body (TDZ) and we don't want to reorder
+   * a 2k-line file just to satisfy declaration order. Ref is set in
+   * an effect right after handleSend's definition. */
+  const handleSendRef = useRef<(t?: string) => void>(() => {});
+  const handlePickSuggestion = useCallback((text: string) => {
+    console.log('[ChatScreen] pick suggestion → autosend · len=' + text.length);
+    handleSendRef.current(text);
+  }, []);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [showCrisisResources, setShowCrisisResources] = useState(false);
+  /* Full SelfMindChatCrisis page — shown after the user taps "View
+   * Resources" on the soft inline modal. Separate state so the modal
+   * can dismiss before the full page slides in. */
+  const [showCrisisPage, setShowCrisisPage] = useState(false);
   const [displayedMessageIds, setDisplayedMessageIds] = useState<Set<string>>(
     new Set(['welcome'])
   );
@@ -369,6 +649,13 @@ export default function ChatScreen() {
   useEffect(() => {
     return () => {
       fullscreenStore.set(false);
+      /* Wipe any unconsumed live-context events so a stale crisis
+       * from this session can't leak into a fresh chat next launch. */
+      clearScope(SCOPE_CRISIS_FLOW);
+      /* Abort any in-flight suggestion-chip fetch on unmount so it
+       * can't resolve into a stale setState after the screen is gone. */
+      suggestionsAbortRef.current?.abort();
+      suggestionsAbortRef.current = null;
       if (chatIdRef.current && conversationRef.current.length > 0 && !chatEndedRef.current) {
         chatEndedRef.current = true;
         endChat(chatIdRef.current, conversationRef.current, startTimeRef.current);
@@ -376,12 +663,18 @@ export default function ChatScreen() {
     };
   }, []); // empty deps = true unmount only
 
-  // Close sidebar + reset fullscreen when leaving the chat tab
+  // Close sidebar + reset fullscreen when leaving the chat tab.
+  // Also: if the user is returning from a crisis-side-flow (box breath
+  // started from the Crisis page), re-open the Crisis page so the
+  // resources are right where they left them.
   useFocusEffect(
     useCallback(() => {
+      if (crisisResumeStore.consume()) {
+        console.log('[ChatScreen] resuming crisis page after side-flow');
+        setShowCrisisPage(true);
+      }
       return () => {
         sidebarStore.close();
-        // Always reset fullscreen when this screen loses focus (tab switch, back button, etc.)
         setIsFullscreen(false);
         fullscreenStore.set(false);
       };
@@ -415,21 +708,51 @@ export default function ChatScreen() {
   );
   const chatState: 'greeting' | 'active' = visibleMessages.length === 0 ? 'greeting' : 'active';
 
+  useEffect(() => {
+    let cancelled = false;
+    if (chatState !== 'greeting' || isIncognito) return () => { cancelled = true; };
+
+    pickChatGreetingTitle()
+      .then(async (title) => {
+        const chips = await pickChatGreetingChips({ contextText: title });
+        return { title, chips };
+      })
+      .then(({ title, chips }) => {
+        if (cancelled) return;
+        setChatGreetingTitle(title);
+        setChatGreetingChips(chips);
+      })
+      .catch(() => { /* Keep the fallback title + chips. */ });
+
+    return () => { cancelled = true; };
+  }, [chatState, isIncognito]);
+
   // ─── Load user and most recent chat on mount ────────────────────────
   useEffect(() => {
     async function init() {
       try {
-        // Get user from Supabase session
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        // Get user from local session (REST auth) — fall back to supabase
+        const session = await getSession();
+        let userId = session?.userId || null;
+        let userEmailVal = session?.email || '';
+
+        if (!userId) {
+          const { data: { user: sbUser } } = await supabase.auth.getUser();
+          if (sbUser) {
+            userId = sbUser.id;
+            userEmailVal = sbUser.email || '';
+          }
+        }
+
+        if (!userId) {
           console.log('>>> No authenticated user');
           setIsLoadingHistory(false);
           return;
         }
 
-        userIdRef.current = user.id;
-        setUserEmail(user.email || '');
-        console.log('>>> User loaded:', user.email, '— starting fresh chat');
+        userIdRef.current = userId;
+        setUserEmail(userEmailVal);
+        console.log('>>> User loaded:', userEmailVal, 'id=' + userId);
       } catch (err) {
         console.error('>>> Init error:', err);
         // Non-fatal
@@ -456,16 +779,139 @@ export default function ChatScreen() {
     return () => sub.remove();
   }, []);
 
-  // ─── Send ─────────────────────────────────────────
-  const handleSend = useCallback(async () => {
-    if (!inputText.trim() || isLoading || !userIdRef.current) return;
+  // ─── AI step (extracted) — called from handleSend in normal flow,
+  //     OR from "Continue Chatting" after a crisis hold. Takes the
+  //     post-user-message conversation + chatId so it works for both
+  //     the immediate path and the deferred-release path. ────────
+  const runAIStep = useCallback(async (
+    chatIdAtSend: string | null,
+    conversationAtSend: ChatMessage[],
+    withUser: Message[],
+    /* Optional: live-context scopes to drain into the Bedrock system
+     * prompt for this single call (e.g. ['crisis-flow'] when releasing
+     * a held reply after the user moved through resources / breath /
+     * tell-someone). Defaults to no injection. */
+    injectScopes?: string[],
+  ) => {
+    setIsLoading(true);
+    try {
+      const bedrockMessages = toBedrockFormat(conversationAtSend);
+      const aiText = normalizeAIText(
+        await sendToBedrock(
+          bedrockMessages,
+          {
+            // Always pass `incognito` so user-prefs + past-session
+            // memory addendums are suppressed in incognito chats.
+            // This is the contract: incognito = clean slate for the
+            // agent, no profile context, no past-history references.
+            incognito: isIncognito,
+            // Pass the user's display name through so the agent knows
+            // what to call them. Skipped automatically in incognito
+            // by the same gate that drops the prefs/memory addendums.
+            userName: userNameRef.current,
+            ...(injectScopes && injectScopes.length > 0 ? { injectScopes } : {}),
+          },
+        ),
+      );
 
-    const userText = inputText.trim();
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: aiText,
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages([...withUser, aiMsg]);
+
+      let nextConversation = conversationAtSend;
+      if (isIncognito) {
+        const aiEntry: ChatMessage = { role: 'assistant', content: aiText, timestamp: Date.now() };
+        nextConversation = [...conversationAtSend, aiEntry];
+        setConversation(nextConversation);
+      } else if (chatIdAtSend) {
+        nextConversation = await addMessage(chatIdAtSend, 'assistant', aiText, conversationAtSend);
+        setConversation(nextConversation);
+
+        if (isFirstExchangeRef.current) {
+          isFirstExchangeRef.current = false;
+          generateAndSetTitle(chatIdAtSend, nextConversation).then((title) => {
+            console.log('>>> Title generated:', title);
+            setChatTitle(title);
+          });
+        }
+      }
+
+      /* "Suggestion on" feature — fire next-user-message prediction
+       * for THIS AI reply. Multiple safety / privacy gates:
+       *
+       *   1. Incognito: SKIP. Incognito's "ephemeral, nothing saved"
+       *      contract means we don't make extra Bedrock calls beyond
+       *      the main reply. The header subtitle accent is already
+       *      suppressed in incognito; this gate stops the actual
+       *      network leak.
+       *   2. The service itself runs a crisis pre-gate (returns []
+       *      when the latest user/AI msg is crisis-flagged) and a
+       *      per-chip post-filter. We don't duplicate those here —
+       *      we just trust the empty-array contract.
+       *
+       * Cancellation: each fetch gets its own AbortController stored
+       * in `suggestionsAbortRef` so a fresh send / new-chat / toggle-
+       * off / unmount can cut the in-flight call instead of letting
+       * it run to its 10s timeout. */
+      if (suggestionsOnRef.current && !isIncognito) {
+        const targetMsgId = aiMsg.id;
+        setSuggestionsLoadingFor(targetMsgId);
+        /* Abort any in-flight chip request — we only care about chips
+         * for the latest AI message; older ones are guaranteed-stale. */
+        suggestionsAbortRef.current?.abort();
+        const controller = new AbortController();
+        suggestionsAbortRef.current = controller;
+
+        const ctxMessages = toBedrockFormat([
+          ...nextConversation,
+        ]);
+        /* Default count (3) is deterministic for QA. The model can
+         * still return fewer when the moment is heavy — the system
+         * prompt allows that explicitly. */
+        void generateChatSuggestions(ctxMessages, { signal: controller.signal }).then((chips) => {
+          if (controller.signal.aborted) return;
+          if (suggestionsLoadingForRef.current !== targetMsgId) return;
+          setSuggestionsByMsgId({ [targetMsgId]: chips });
+          setSuggestionsLoadingFor(null);
+        });
+      }
+    } catch (err: any) {
+      console.error('>>> Send error:', err);
+      setErrorText(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isIncognito]);
+
+  // ─── Send ─────────────────────────────────────────
+  const handleSend = useCallback(async (overrideText?: string) => {
+    /* Block sends while a crisis hold is pending — user must Continue
+     * Chatting or View Resources first. Otherwise a second send could
+     * race the held AI call and produce duplicate replies.
+     *
+     * `overrideText` lets call sites (e.g. suggestion-chip tap) send
+     * immediately without round-tripping through the input pill state,
+     * which is async and would race the read at line below. */
+    const sourceText = overrideText ?? inputText;
+    if (!sourceText.trim() || isLoading || !userIdRef.current || pendingAI) {
+      console.log('[ChatScreen] handleSend bailed — input=' + sourceText.trim().length + ' isLoading=' + isLoading + ' userId=' + (userIdRef.current ? 'set' : 'null') + ' incognito=' + isIncognito + ' pendingAI=' + (pendingAI ? 'true' : 'false'));
+      return;
+    }
+
+    const userText = sourceText.trim();
+    console.log('[ChatScreen] handleSend → length=' + userText.length + ' incognito=' + isIncognito + ' override=' + (overrideText !== undefined));
     setInputText('');
     setErrorText(null);
     setIsMenuOpen(false);
-
-    if (detectCrisis(userText)) setShowCrisisResources(true);
+    /* Clear stale suggestion chips AND abort any in-flight chip
+     * fetch — they belonged to the previous AI reply. New chips will
+     * be generated after the new AI reply lands (if the toggle is
+     * on and we're not incognito). */
+    resetSuggestionState();
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -476,15 +922,21 @@ export default function ChatScreen() {
 
     const withUser = [...messages, userMsg];
     setMessages(withUser);
-    setIsLoading(true);
 
+    /* Crisis detection runs FIRST — pure substring scan, no I/O,
+     * fires identically for incognito and non-incognito. We then
+     * persist the user message in the appropriate mode (no createChat
+     * for incognito; in-memory only) and stash the post-persist state
+     * in pendingAI so Continue Chatting can release the AI step. */
+    const isCrisis = detectCrisis(userText);
+    if (isCrisis) {
+      console.log('[ChatScreen] crisis detected · incognito=' + isIncognito);
+    }
+
+    let currentChatId = chatId;
+    let currentConversation = conversation;
     try {
-      // Create chat if this is the first message
-      let currentChatId = chatId;
-      let currentConversation = conversation;
-
       if (!currentChatId && !isIncognito) {
-        console.log('>>> Creating new chat for user:', userIdRef.current);
         const newChat = await createChat(userIdRef.current, 'textchat');
         if (newChat) {
           currentChatId = newChat.id;
@@ -493,10 +945,7 @@ export default function ChatScreen() {
           isFirstExchangeRef.current = true;
         }
       }
-
-      // Build conversation with user message
       if (isIncognito) {
-        // In-memory only — never saved to DB
         const userEntry: ChatMessage = { role: 'user', content: userText, timestamp: Date.now() };
         currentConversation = [...currentConversation, userEntry];
         setConversation(currentConversation);
@@ -504,46 +953,61 @@ export default function ChatScreen() {
         currentConversation = await addMessage(currentChatId, 'user', userText, currentConversation);
         setConversation(currentConversation);
       }
-
-      // Send to AI with FULL conversation history for memory
-      const bedrockMessages = toBedrockFormat(currentConversation);
-      const aiText = normalizeAIText(await sendToBedrock(bedrockMessages));
-
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        text: aiText,
-        isUser: false,
-        timestamp: new Date(),
-      };
-      const final = [...withUser, aiMsg];
-      setMessages(final);
-
-      // Store AI reply in conversation
-      if (isIncognito) {
-        // In-memory only
-        const aiEntry: ChatMessage = { role: 'assistant', content: aiText, timestamp: Date.now() };
-        currentConversation = [...currentConversation, aiEntry];
-        setConversation(currentConversation);
-      } else if (currentChatId) {
-        currentConversation = await addMessage(currentChatId, 'assistant', aiText, currentConversation);
-        setConversation(currentConversation);
-
-        // Generate title after first exchange
-        if (isFirstExchangeRef.current) {
-          isFirstExchangeRef.current = false;
-          generateAndSetTitle(currentChatId, currentConversation).then((title) => {
-            console.log('>>> Title generated:', title);
-            setChatTitle(title);
-          });
-        }
-      }
     } catch (err: any) {
-      console.error('>>> Send error:', err);
+      console.error('>>> Send (user-step) error:', err);
       setErrorText(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setIsLoading(false);
+      /* Even if persistence threw, the crisis modal still must surface
+       * — the user typed something heavy and they need the resources
+       * regardless of whether the message saved. */
+      if (isCrisis) {
+        setPendingAI({ chatId: null, conversation: currentConversation, withUser });
+        setShowCrisisResources(true);
+      }
+      return;
     }
-  }, [inputText, isLoading, messages, isIncognito, chatId, conversation]);
+
+    /* Crisis hold — sets pendingAI and shows the inline modal.
+     * Continue Chatting → releasePendingAI → fires the AI step.
+     * View Resources → keep pendingAI held through the crisis flow;
+     * release on crisis-page close so Mello replies once the user is
+     * back in the chat (works the same in incognito).
+     * Also stash the recent conversation so /tell-someone can use it
+     * as context when generating drafts. */
+    if (isCrisis) {
+      console.log('[ChatScreen] holding AI response · chatId=' + (currentChatId ?? 'null'));
+      crisisContextStore.set(
+        currentConversation.map((m) => ({ role: m.role, content: m.content })),
+      );
+      setPendingAI({
+        chatId: currentChatId,
+        conversation: currentConversation,
+        withUser,
+      });
+      setShowCrisisResources(true);
+      return;
+    }
+
+    /* Normal flow — fire the AI step now. */
+    void runAIStep(currentChatId, currentConversation, withUser);
+  }, [inputText, isLoading, messages, isIncognito, chatId, conversation, runAIStep, pendingAI]);
+
+  /* Bridge `handleSend` to the ref so `handlePickSuggestion` (defined
+   * higher up) can call the latest version without the TDZ. */
+  useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
+
+  /* Release the held AI call. Drains the `crisis-flow` live-context
+   * scope into the Bedrock call so the deferred reply is aware of
+   * what the user just did (viewed resources, did box breath, sent a
+   * tell-someone message). When the user picked Continue Chatting on
+   * the inline modal, the scope is empty and injection is a no-op —
+   * the call falls back to a normal reply. */
+  const releasePendingAI = useCallback(() => {
+    if (!pendingAI) return;
+    console.log('[ChatScreen] releasing held AI response · injecting ' + SCOPE_CRISIS_FLOW);
+    const { chatId: cid, conversation: conv, withUser } = pendingAI;
+    setPendingAI(null);
+    void runAIStep(cid, conv, withUser, [SCOPE_CRISIS_FLOW]);
+  }, [pendingAI, runAIStep]);
 
   // ─── Finalize current chat (guarded — never fires twice) ────────────
   const finalizeCurrentChat = useCallback(() => {
@@ -569,7 +1033,17 @@ export default function ChatScreen() {
       setStartTime(loadedChat.start_time || Date.now());
       setIsStarred(!!(loadedChat as any).is_starred);
       setChatFeedback((loadedChat as any).feedback ?? null);
+      setChatType(loadedChat.type === 'voicechat' ? 'voicechat' : 'textchat');
       isFirstExchangeRef.current = (loadedChat.conversation || []).length === 0;
+
+      // Fire-and-forget: ask the journal whether this chat is currently saved.
+      // Header subtitle + context-menu label depend on this.
+      isChatSaved(loadedChat.id)
+        .then((saved) => {
+          console.log('[ChatScreen] isChatSaved(' + loadedChat.id + ') = ' + saved);
+          setIsSavedToJournal(saved);
+        })
+        .catch((err) => console.warn('[ChatScreen] isChatSaved failed', err));
 
       // Convert to display format
       const restored: Message[] = (loadedChat.conversation || []).map((m, idx) => ({
@@ -580,8 +1054,12 @@ export default function ChatScreen() {
       }));
       setMessages([WELCOME_MESSAGE, ...restored]);
       setDisplayedMessageIds(new Set(['welcome', ...restored.map((m) => m.id)]));
+      /* Restored chat = no in-flight chip fetch is still relevant.
+       * Abort any pending one and clear cached chips from the prior
+       * thread so they don't briefly appear under restored AI msgs. */
+      resetSuggestionState();
     }
-  }, [finalizeCurrentChat]);
+  }, [finalizeCurrentChat, resetSuggestionState]);
 
   // ─── Incognito content fade ───────────────────────
   const contentOpacity = useSharedValue(1);
@@ -606,7 +1084,10 @@ export default function ChatScreen() {
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('Incognito chat');
     setIsMenuOpen(false);
-  }, [finalizeCurrentChat]);
+    /* Cancel any in-flight chip fetch from the prior (non-incognito)
+     * thread so it can't resolve into the new incognito surface. */
+    resetSuggestionState();
+  }, [finalizeCurrentChat, resetSuggestionState]);
 
   const handleExitIncognito = useCallback(() => {
     setIsIncognito(false);
@@ -616,7 +1097,8 @@ export default function ChatScreen() {
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('New chat');
     isFirstExchangeRef.current = true;
-  }, []);
+    resetSuggestionState();
+  }, [resetSuggestionState]);
 
   // ─── Message actions ──────────────────────────────
   const handleTypewriterComplete = useCallback((id: string) => {
@@ -649,8 +1131,19 @@ export default function ChatScreen() {
 
   const handleRenameSave = useCallback(async (newTitle: string) => {
     setChatTitle(newTitle);
-    if (chatId) await updateTitle(chatId, newTitle);
-  }, [chatId]);
+    if (!chatId) return;
+    await updateTitle(chatId, newTitle);
+    // Keep the saved-journal entry in sync. The partial UNIQUE on
+    // (user_id, chat_id) WHERE source='chat' makes this an upsert that
+    // overwrites the entry's title in place — no duplicate rows.
+    if (isSavedToJournal) {
+      try {
+        await saveChatAsEntry({ chatId, title: newTitle, chatType });
+      } catch (err) {
+        console.warn('[ChatScreen] rename: journal-entry sync failed', err);
+      }
+    }
+  }, [chatId, chatType, isSavedToJournal]);
 
   const handleNewChat = useCallback(() => {
     console.log('>>> Starting new chat');
@@ -663,11 +1156,14 @@ export default function ChatScreen() {
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('New chat');
     setIsStarred(false);
+    setIsSavedToJournal(false);
+    setChatType('textchat');
     setErrorText(null);
     setStartTime(Date.now());
     isFirstExchangeRef.current = true;
     sidebarStore.close();
-  }, [finalizeCurrentChat]);
+    resetSuggestionState();
+  }, [finalizeCurrentChat, resetSuggestionState]);
 
   useEffect(() => {
     if (!pendingNav) return;
@@ -685,17 +1181,53 @@ export default function ChatScreen() {
   }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
-    if (chatId) await deleteChat(chatId);
+    // If this chat had a journal entry, drop it too — orphans cause
+    // "saved chat" tags pointing at deleted threads.
+    if (chatId) {
+      await deleteChat(chatId);
+      try { await unsaveChatEntry(chatId); } catch (err) {
+        console.warn('[ChatScreen] unsave-on-delete failed', err);
+      }
+    }
     setChatId(null);
     setConversation([]);
     setMessages([WELCOME_MESSAGE]);
     setDisplayedMessageIds(new Set(['welcome']));
     setChatTitle('New chat');
     setIsStarred(false);
+    setIsSavedToJournal(false);
+    setChatType('textchat');
     setChatFeedback(null);
     setStartTime(Date.now());
     isFirstExchangeRef.current = true;
-  }, [chatId]);
+    resetSuggestionState();
+  }, [chatId, resetSuggestionState]);
+
+  /* Marketing demo — populates the chat with a single canned exchange
+   * for screenshots. Doesn't touch the backend (no createChat / addMessage)
+   * so it leaves no trace. Reachable from the kebab → "Demo" item; the
+   * menu closes before render so it won't appear in the screenshot. */
+  const handleLoadDemo = useCallback(() => {
+    setIsMenuOpen(false);
+    const baseTs = Date.now();
+    const demoMessages: Message[] = [
+      {
+        id: 'demo-user',
+        text: 'I can’t sleep... my thoughts just won’t stop tonight.',
+        isUser: true,
+        timestamp: new Date(baseTs),
+      },
+      {
+        id: 'demo-ai',
+        text: 'I hear you. It’s okay to feel overwhelmed. Would you like to try a breathing exercise, or just talk?',
+        isUser: false,
+        timestamp: new Date(baseTs + 1500),
+      },
+    ];
+    setMessages([WELCOME_MESSAGE, ...demoMessages]);
+    setDisplayedMessageIds(new Set(['welcome', 'demo-user', 'demo-ai']));
+    setChatTitle('Late-night thoughts');
+  }, []);
 
   const handleStar = useCallback(() => {
     setIsMenuOpen(false);
@@ -704,28 +1236,122 @@ export default function ChatScreen() {
     if (chatId) starChat(chatId, next);
   }, [chatId, isStarred]);
 
+  const handleSaveToJournal = useCallback(async () => {
+    setIsMenuOpen(false);
+    if (!chatId) {
+      console.warn('[ChatScreen] save-to-journal: no chatId yet (greeting state)');
+      return;
+    }
+    if (isIncognito) {
+      console.warn('[ChatScreen] save-to-journal blocked in incognito');
+      return;
+    }
+    const next = !isSavedToJournal;
+    console.log('[ChatScreen] save→journal next=' + next + ' chatId=' + chatId);
+    // Optimistic flip — UI reflects immediately; rollback if request fails.
+    setIsSavedToJournal(next);
+    const result = next
+      ? await saveChatAsEntry({ chatId, title: chatTitle, chatType })
+      : await unsaveChatEntry(chatId);
+    if (!result.ok) {
+      console.warn('[ChatScreen] save-to-journal failed, rolling back:', result.error);
+      setIsSavedToJournal(!next);
+    }
+  }, [chatId, chatTitle, chatType, isIncognito, isSavedToJournal]);
+
+  // ─── Pull-to-refresh — refetch the current chat from the server ──
+  const handleRefresh = useCallback(async () => {
+    if (!chatId) return;
+    console.log('[ChatScreen] pull-to-refresh chatId=' + chatId);
+    setRefreshing(true);
+    try {
+      const fresh = await getChat(chatId);
+      if (fresh) {
+        setConversation(fresh.conversation || []);
+        setChatTitle(fresh.title || 'New chat');
+        setIsStarred(!!(fresh as any).is_starred);
+        setChatFeedback((fresh as any).feedback ?? null);
+        const restored: Message[] = (fresh.conversation || []).map((m, idx) => ({
+          id: `restored_${idx}`,
+          text: m.content,
+          isUser: m.role === 'user',
+          timestamp: new Date(m.timestamp),
+        }));
+        setMessages([WELCOME_MESSAGE, ...restored]);
+        setDisplayedMessageIds(new Set(['welcome', ...restored.map((m) => m.id)]));
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [chatId]);
+
+  /* Last AI message id — chips only render under THIS message so
+   * older replies stay clean as the conversation moves on. */
+  const latestAiMessageId = useMemo(() => {
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      if (!visibleMessages[i].isUser) return visibleMessages[i].id;
+    }
+    return null;
+  }, [visibleMessages]);
+
   // ─── Render message ───────────────────────────────
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     if (item.id === 'welcome') return null;
+    const isLatestAi = !item.isUser && item.id === latestAiMessageId;
+    const chipsForThis = suggestionsByMsgId[item.id];
+    const isLoadingChips = suggestionsOn && isLatestAi && suggestionsLoadingFor === item.id;
+    /* Don't render chips while the typewriter is still animating —
+     * it'd shift the layout mid-reveal and feel jumpy. */
+    const typewriterPending = !item.isUser && !displayedMessageIds.has(item.id);
+    /* Chip row visibility — every gate is load-bearing:
+     *   - suggestionsOn: user toggle (default on, off-able from menu)
+     *   - !isIncognito:  incognito mode disables the feature entirely
+     *                    (no UI, on top of the runAIStep network gate)
+     *   - isLatestAi:    chips only attach to the most recent AI bubble
+     *   - !typewriterPending: don't pop chips mid-reveal (layout shift)
+     *   - loading || chips: skip empty state silently */
+    const showChipRow =
+      suggestionsOn &&
+      !isIncognito &&
+      isLatestAi &&
+      !typewriterPending &&
+      (isLoadingChips || (chipsForThis && chipsForThis.length > 0));
+
     return (
-      <ChatMessageItem
-        item={item}
-        isNew={isNewMessage(item.id)}
-        showTypewriter={!item.isUser && !displayedMessageIds.has(item.id)}
-        onTypewriterComplete={handleTypewriterComplete}
-        onCopy={handleCopy}
-        onLike={handleLike}
-        onDislike={handleDislike}
-      />
+      <View>
+        <ChatMessageItem
+          item={item}
+          isNew={isNewMessage(item.id)}
+          showTypewriter={!item.isUser && !displayedMessageIds.has(item.id)}
+          onTypewriterComplete={handleTypewriterComplete}
+          onCopy={handleCopy}
+          onLike={handleLike}
+          onDislike={handleDislike}
+          feedback={chatFeedback}
+        />
+        {showChipRow && (
+          <View style={styles.suggestionRowWrap}>
+            <SuggestionChips
+              chips={chipsForThis ?? []}
+              onPick={handlePickSuggestion}
+              loading={isLoadingChips}
+            />
+          </View>
+        )}
+      </View>
     );
-  }, [displayedMessageIds, handleTypewriterComplete, handleCopy, handleLike, handleDislike]);
+  }, [
+    displayedMessageIds, handleTypewriterComplete, handleCopy, handleLike, handleDislike,
+    chatFeedback, latestAiMessageId, suggestionsByMsgId, suggestionsOn, isIncognito,
+    suggestionsLoadingFor, handlePickSuggestion,
+  ]);
 
   const renderFooter = useCallback(() => {
     if (isLoading) {
       return (
         <View style={styles.rowAI}>
           <View style={styles.aiContent}>
-            <LoadingDots color="rgba(0,0,0,0.3)" dotSize={7} />
+            <LoadingDots color={C.ink3} dotSize={7} />
           </View>
         </View>
       );
@@ -774,11 +1400,12 @@ export default function ChatScreen() {
   const sendScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: sendScale.value }] }));
 
   const handleSendPress = useCallback(() => {
+    console.log('[ChatScreen] sendBtn tapped → inputText.len=' + inputText.trim().length + ' isLoading=' + isLoading + ' isLoadingHistory=' + isLoadingHistory + ' userId=' + userIdRef.current);
     sendScale.value = withTiming(0.88, { duration: 80 }, () => {
       sendScale.value = withTiming(1, { duration: 120 });
     });
     handleSend();
-  }, [handleSend]);
+  }, [handleSend, inputText, isLoading, isLoadingHistory]);
 
   // ═══════════════════════════════════════════════════
   // RENDER
@@ -816,10 +1443,19 @@ export default function ChatScreen() {
           <ContextMenu
             chatTitle={chatTitle}
             isStarred={isStarred}
+            isSavedToJournal={isSavedToJournal}
+            canSaveToJournal={!isIncognito && !!chatId}
+            suggestionsOn={suggestionsOn}
             onRename={handleRename}
             onStar={handleStar}
+            onSaveToJournal={handleSaveToJournal}
             onDelete={handleDelete}
             onNewChat={handleNewChat}
+            onToggleSuggestions={() => {
+              toggleSuggestions();
+              setIsMenuOpen(false);
+            }}
+            onLoadDemo={handleLoadDemo}
             onClose={() => setIsMenuOpen(false)}
           />
         </View>
@@ -830,32 +1466,111 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        {/* ── Header ── */}
+        {/* ── Header (MBChatMid port — non-incognito + incognito) ──
+            Both modes use the SelfMind chrome (back chevron · avatar +
+            title + mono subtitle · right action). The avatar swatch +
+            glyph + subtitle copy are the only visible differences:
+              regular   — peach swatch + Sparkle  + "a quiet new thread" / "saved to journal"
+              incognito — cream2 swatch + EyeShut + "nothing saved · ephemeral"
+            Right action:
+              regular greeting — eye-off (enter incognito)
+              regular active   — ellipsis (context menu)
+              incognito        — close X (exit incognito) */}
         <View style={[styles.header, { paddingTop }]}>
-          <Pressable style={styles.headerBtn} hitSlop={8} onPress={sidebarStore.open}>
-            <Ionicons name="menu" size={24} color="#1A1A1A" />
+          <Pressable
+            style={styles.headerBtn}
+            hitSlop={8}
+            onPress={() => {
+              console.log('[ChatScreen] back tapped → /chats');
+              router.push('/chats' as any);
+            }}
+          >
+            <Glyphs.Back size={20} color={C.ink} />
           </Pressable>
 
-          <View style={styles.headerCenter}>
-            <Text style={styles.logoText}>mello</Text>
-            <Animated.View style={subtitleAnimStyle}>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {headerSubtitleText}
+          <View style={styles.headerActiveCenter}>
+            <View
+              style={[
+                styles.headerAvatar,
+                isIncognito && styles.headerAvatarIncognito,
+              ]}
+            >
+              {isIncognito ? (
+                <Glyphs.EyeShut size={16} color={C.ink} />
+              ) : (
+                <Glyphs.Sparkle size={16} color={C.ink} />
+              )}
+            </View>
+            <View style={styles.headerActiveText}>
+              <Text style={styles.headerActiveTitle} numberOfLines={1}>
+                {isIncognito
+                  ? 'Incognito'
+                  : (chatTitle || 'New chat')}
               </Text>
-            </Animated.View>
+              <Text style={styles.headerActiveSubtitle}>
+                {isIncognito
+                  ? 'nothing saved · ephemeral'
+                  : isSavedToJournal
+                    ? 'saved to journal'
+                    : isStarred
+                      ? 'starred'
+                      : chatState === 'active'
+                        ? 'text chat'
+                        : 'a quiet new thread'}
+              </Text>
+              {!isIncognito && renderSuggestionsUi && (
+                <Animated.Text
+                  style={[styles.headerSuggestionsLine, styles.headerActiveSubtitleAccent, suggestionFadeStyle]}
+                  onPress={handleTurnOffSuggestions}
+                  suppressHighlighting
+                >
+                  suggestions on
+                </Animated.Text>
+              )}
+              {!isIncognito && !renderSuggestionsUi && (
+                <Text
+                  style={[styles.headerSuggestionsLine, styles.headerActiveSubtitleAction]}
+                  onPress={toggleSuggestions}
+                  suppressHighlighting
+                >
+                  turn on suggestions
+                </Text>
+              )}
+            </View>
           </View>
 
           {isIncognito ? (
-            <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => fadeSwitchMode(handleExitIncognito)}>
-              <Ionicons name="close" size={24} color="#1A1A1A" />
+            <Pressable
+              style={styles.headerBtn}
+              hitSlop={8}
+              onPress={() => {
+                console.log('[ChatScreen] close (X) tapped → exit incognito');
+                fadeSwitchMode(handleExitIncognito);
+              }}
+            >
+              <Glyphs.Close size={20} color={C.ink} />
             </Pressable>
           ) : chatState === 'active' ? (
-            <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => setIsMenuOpen((v) => !v)}>
-              <Ionicons name="ellipsis-vertical" size={22} color="#1A1A1A" />
+            <Pressable
+              style={styles.headerBtn}
+              hitSlop={8}
+              onPress={() => {
+                console.log('[ChatScreen] ellipsis tapped → toggle context menu');
+                setIsMenuOpen((v) => !v);
+              }}
+            >
+              <Ionicons name="ellipsis-vertical" size={22} color={C.ink} />
             </Pressable>
           ) : (
-            <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => fadeSwitchMode(handleStartIncognito)}>
-              <Ionicons name="eye-off-outline" size={22} color="#1A1A1A" />
+            <Pressable
+              style={styles.headerBtn}
+              hitSlop={8}
+              onPress={() => {
+                console.log('[ChatScreen] eye-off tapped (greeting) → start incognito');
+                fadeSwitchMode(handleStartIncognito);
+              }}
+            >
+              <Glyphs.EyeShut size={20} color={C.ink} />
             </Pressable>
           )}
         </View>
@@ -864,17 +1579,42 @@ export default function ChatScreen() {
         <Animated.View style={[styles.flex, contentAnimStyle]}>
           {isIncognito && chatState === 'greeting' ? (
             <View style={styles.greetingContainer}>
-              <Ionicons name="eye-off-outline" size={48} color="#1A1A1A" style={styles.incognitoIcon} />
-              <Text style={styles.incognitoTitle}>Incognito chat</Text>
-              <Text style={styles.incognitoSubtitle}>
-                This conversation won't be saved or used to personalise your profile.
+              <View style={styles.incognitoBadge}>
+                <Glyphs.EyeShut size={32} color={C.ink} />
+              </View>
+              <Text style={styles.greetingKicker}>OFF THE RECORD</Text>
+              <Text style={styles.greetingText}>
+                Talk{' '}
+                <Text style={styles.greetingTextItalic}>without footprints</Text>.
+              </Text>
+              <Text style={styles.greetingHint}>
+                This thread won{'’'}t be saved, won{'’'}t shape your profile, and disappears the moment you tap close. Type anything.
               </Text>
             </View>
           ) : chatState === 'greeting' ? (
             <View style={styles.greetingContainer}>
+              <Text style={styles.greetingKicker}>A QUIET ROOM</Text>
               <Text style={styles.greetingText}>
-                {'How can I help you\n' + getTimeGreeting()}
+                {chatGreetingTitle}
               </Text>
+              <Text style={styles.greetingHint}>
+                Type below — out loud or in fragments. Whatever shape it{'’'}s in.
+              </Text>
+
+              {/* Preset opener chips — give the user a one-tap on-ramp
+               * when they don't know how to start. Tapping fills the
+               * input pill (per product spec) so they can edit before
+               * sending. Hidden when the toggle is off. */}
+              {renderSuggestionsUi && (
+                <Animated.View style={[styles.greetingChipsWrap, suggestionFadeStyle]}>
+                  <SuggestionChips
+                    chips={chatGreetingChips}
+                    onPick={handlePickSuggestion}
+                    ariaLabel="Conversation openers"
+                    align="center"
+                  />
+                </Animated.View>
+              )}
             </View>
           ) : (
             <FadingScrollWrapper topFadeHeight={32} bottomFadeHeight={48}>
@@ -887,6 +1627,15 @@ export default function ChatScreen() {
                 showsVerticalScrollIndicator={false}
                 ListFooterComponent={renderFooter}
                 removeClippedSubviews={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={C.ink2}
+                    colors={[C.coral]}
+                    progressBackgroundColor={C.paper}
+                  />
+                }
               />
             </FadingScrollWrapper>
           )}
@@ -910,11 +1659,11 @@ export default function ChatScreen() {
               <TextInput
                 style={styles.input}
                 placeholder={
-                  isLoading ? 'Mello is thinking...'
-                  : chatState === 'active' ? 'Reply to Mello'
-                  : 'Chat with mello'
+                  isLoading ? 'thinking…'
+                  : chatState === 'active' ? 'Reply…'
+                  : 'Type to start a thread…'
                 }
-                placeholderTextColor="rgba(0,0,0,0.35)"
+                placeholderTextColor={C.ink3}
                 value={inputText}
                 onChangeText={setInputText}
                 editable={!isLoading && !isLoadingHistory}
@@ -937,7 +1686,7 @@ export default function ChatScreen() {
                         onPress={handleSendPress}
                         disabled={isLoading || isLoadingHistory}
                       >
-                        <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                        <Ionicons name="arrow-up" size={20} color={C.cream} />
                       </Pressable>
                     </Animated.View>
                   </View>
@@ -967,25 +1716,61 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* ── Crisis Modal ── */}
+      {/* ── Crisis quick-prompt (inline soft modal) ── */}
       {showCrisisResources && (
         <View style={styles.crisisOverlay}>
           <View style={styles.crisisCard}>
-            <Text style={styles.crisisTitle}>Mello cares about you</Text>
+            <Text style={styles.crisisTitle}>A pause for a moment</Text>
             <Text style={styles.crisisText}>
               It sounds like you might be going through something difficult.
               Would you like to see some resources that can help?
             </Text>
-            <Pressable style={styles.crisisBtn}
-              onPress={() => { setShowCrisisResources(false); callCrisisLine(); }}>
+            <Pressable
+              style={styles.crisisBtn}
+              onPress={() => {
+                /* User chose resources — close the inline prompt and
+                 * open the full crisis page. We KEEP the pending AI
+                 * call held while they're on the crisis page or in any
+                 * side-flow (no chatter during a heavy moment). It
+                 * fires when the user closes the crisis overlay back
+                 * to chat. The recorded event feeds liveContextInjection
+                 * so Mello's deferred reply knows what they did. */
+                recordCrisisFlowEvent('viewed-resources');
+                setShowCrisisResources(false);
+                setShowCrisisPage(true);
+              }}
+            >
               <Text style={styles.crisisBtnText}>View Resources</Text>
             </Pressable>
-            <Pressable style={styles.crisisDismiss} onPress={() => setShowCrisisResources(false)}>
+            <Pressable
+              style={styles.crisisDismiss}
+              onPress={() => {
+                /* User chose to keep chatting — close the prompt and
+                 * release the held AI call so Mello replies now. */
+                setShowCrisisResources(false);
+                releasePendingAI();
+              }}
+            >
               <Text style={styles.crisisDismissText}>Continue Chatting</Text>
             </Pressable>
           </View>
         </View>
       )}
+
+      {/* ── Full crisis page — Indian helplines + tell-someone CTA ──
+       * Rendered as an in-tree absolute overlay (NOT a native Modal)
+       * so the navigation stack can slide a side-flow on top of it
+       * without a chat-flash. On close we release any held AI reply
+       * — the crisis pause is over, Mello can speak again. Same
+       * release path applies to incognito (pendingAI is set the same
+       * way regardless of mode). */}
+      <SelfMindChatCrisis
+        visible={showCrisisPage}
+        onClose={() => {
+          setShowCrisisPage(false);
+          releasePendingAI();
+        }}
+      />
     </View>
   );
 }
@@ -995,7 +1780,7 @@ export default function ChatScreen() {
 // ═══════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: C.cream },
   flex: { flex: 1 },
 
   // ── Header ──
@@ -1004,6 +1789,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
   },
   headerBtn: {
     width: 40,
@@ -1016,17 +1803,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoText: {
-    fontFamily: 'Playwrite',
-    fontSize: 26,
-    color: '#1A1A1A',
-    lineHeight: 32,
-    marginBottom: 10,
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 22,
+    color: C.ink,
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
   headerSubtitle: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 12,
-    color: 'rgba(0,0,0,0.45)',
-    marginTop: 1,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 9,
+    letterSpacing: 1.4,
+    color: C.ink3,
+    marginTop: 4,
+  },
+
+  // Active-chat header (MBChatMid layout)
+  headerActiveCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+  },
+  headerAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.peach,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  /* Incognito avatar — cream2 swatch with a dashed ink border so the
+   * eye-shut glyph reads as "muted / private" rather than warm. The
+   * dashed stroke echoes the input pill's incognito treatment. */
+  headerAvatarIncognito: {
+    backgroundColor: C.cream2,
+    borderWidth: 1,
+    borderColor: C.ink2,
+    borderStyle: 'dashed',
+  },
+  headerActiveText: { flex: 1 },
+  headerActiveTitle: {
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 15,
+    lineHeight: 21,
+    letterSpacing: -0.05,
+    color: C.ink,
+  },
+  headerActiveSubtitle: {
+    marginTop: 2,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 9,
+    letterSpacing: 1.2,
+    color: C.ink3,
+  },
+  headerSuggestionsLine: {
+    marginTop: 2,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 9,
+    letterSpacing: 1.2,
+  },
+  /* Highlighted accent color for the "suggestions on" status — same
+   * mono cut + size, deeper lavender so the on-state reads at a glance
+   * without competing with the chat title above. */
+  headerActiveSubtitleAccent: {
+    color: C.lavenderDeep,
+  },
+  headerActiveSubtitleAction: {
+    color: C.ink3,
+    opacity: 0.72,
   },
 
   // ── Context Menu ──
@@ -1043,43 +1886,67 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   contextMenu: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    backgroundColor: C.paper,
+    borderRadius: 22,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    minWidth: 240,
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: C.line,
+    shadowColor: C.ink,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 12,
   },
-  contextMenuTitle: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 12,
-    color: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  contextMenuHeader: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  contextMenuKicker: {
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 10,
+    letterSpacing: 2,
+    color: C.ink3,
+    textTransform: 'uppercase',
+  },
+  contextMenuTitleNew: {
+    marginTop: 4,
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    color: C.ink,
   },
   contextMenuDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginHorizontal: 12,
+    backgroundColor: C.line,
+    marginHorizontal: 8,
     marginBottom: 4,
+  },
+  contextMenuRowWrap: {
+    borderRadius: 14,
+    marginHorizontal: 2,
+    marginVertical: 1,
+    overflow: 'hidden',
   },
   contextMenuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 13,
   },
   contextMenuLabel: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 16,
-    color: '#1A1A1A',
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: C.ink,
+    letterSpacing: 0.05,
   },
-  contextMenuDanger: { color: '#EF4444' },
+  contextMenuDanger: { color: C.coral },
+  contextMenuAccentCoral: { color: C.coral },
 
   // ── Greeting ──
   greetingContainer: {
@@ -1088,85 +1955,143 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
   },
-  greetingText: {
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 32,
-    color: '#1A1A1A',
-    lineHeight: 42,
+  greetingKicker: {
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
+    letterSpacing: 2.2,
+    color: C.ink3,
+    marginBottom: 14,
+  },
+  greetingTextItalic: { fontFamily: 'Fraunces-MediumItalic' },
+  greetingHint: {
+    marginTop: 16,
+    fontFamily: 'Fraunces-Text-Italic',
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: C.ink3,
     textAlign: 'center',
+    maxWidth: 280,
+    letterSpacing: 0.1,
+  },
+  greetingText: {
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 30,
+    color: C.ink,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  greetingChipsWrap: {
+    marginTop: 28,
+    width: '100%',
+    /* Center the wrapped pill row under the greeting copy. */
+    alignItems: 'center',
+  },
+  /* Wrapper for per-message suggestion chips — left-aligned to the
+   * AI message column, with a small gap below the bubble. */
+  suggestionRowWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 2,
+    marginBottom: 8,
   },
 
   // ── Incognito empty state ──
+  /* Soft cream2 circle with a dashed ink border housing the EyeShut
+   * glyph — visually echoes the header avatar's incognito variant. */
+  incognitoBadge: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: C.cream2,
+    borderWidth: 1,
+    borderColor: C.ink2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
   incognitoIcon: {
     marginBottom: 20,
     opacity: 0.7,
   },
   incognitoTitle: {
-    fontFamily: 'Outfit-SemiBold',
-    fontSize: 20,
-    color: '#1A1A1A',
+    fontFamily: 'Fraunces-Medium',
+    fontSize: 22,
+    color: C.ink,
     marginBottom: 10,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   incognitoSubtitle: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 15,
-    color: 'rgba(0,0,0,0.5)',
+    fontFamily: 'Fraunces-Text',
+    fontSize: 14,
+    color: C.ink2,
     textAlign: 'center',
     lineHeight: 22,
     maxWidth: 280,
   },
 
-  // ── Messages ──
+  // ── Messages (MBChatMid styling) ──
   messageList: {
-    paddingHorizontal: 20,
-    paddingTop: 12,       // ↓ was 8
-    paddingBottom: 35,    // ↓ was 12
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 40,
   },
   rowUser: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginBottom: 2,     // ↓ was 6
+    marginBottom: 10,
   },
   userBubble: {
-    backgroundColor: '#ffffffad',
-    borderRadius: 20,
-    borderBottomRightRadius: 4,
+    // Ink bubble, cream text, asymmetric top-right corner.
+    backgroundColor: C.ink,
     paddingHorizontal: 16,
-    paddingVertical: 11,
-    maxWidth: '78%',
+    paddingVertical: 12,
+    maxWidth: '84%',
+    borderRadius: 20,
+    borderTopRightRadius: 6,
   },
   userText: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 16,
-    color: '#1A1A1A',
-    lineHeight: 23,
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: C.cream,
+    lineHeight: 20,
+    letterSpacing: 0.05,
   },
   rowAI: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 2,     // ↓ was 6
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  // KEY FIX: removed flex:1 which was stretching AI rows to fill remaining space
+  // Lavender bubble, ink text, asymmetric top-left corner.
+  aiBubble: {
+    backgroundColor: C.lavender,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    maxWidth: '84%',
+    borderRadius: 20,
+    borderTopLeftRadius: 6,
+  },
+  // Legacy alias kept for any external reference; not used in render.
   aiContent: {
-    maxWidth: '85%',     // replaces flex:1 — constrains width without stretching height
-    paddingRight: 8,     // ↓ was 40 — that extra right padding was adding dead space
+    maxWidth: '85%',
+    paddingRight: 8,
   },
   aiText: {
-    fontFamily: 'Outfit-Regular',
+    fontFamily: 'Fraunces-Medium',
     fontSize: 16,
-    color: '#1A1A1A',
-    lineHeight: 25,
+    color: C.ink,
+    lineHeight: 24,
+    letterSpacing: -0.05,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
+    marginLeft: 6,
     gap: 4,
   },
   actionBtn: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -1182,16 +2107,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   errorText: {
-    fontFamily: 'Outfit-Regular',
+    fontFamily: 'Fraunces-Text-Italic',
     fontSize: 13,
-    color: '#EF4444',
+    color: C.coral,
     flex: 1,
     textAlign: 'center',
   },
   errorDismiss: {
-    fontFamily: 'Outfit-Medium',
-    fontSize: 13,
-    color: 'rgba(0,0,0,0.4)',
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: C.ink3,
   },
 
   // ── Input ──
@@ -1200,35 +2126,32 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   inputPill: {
-    backgroundColor: 'rgba(0,0,0,0.07)',
+    backgroundColor: C.paper,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 6,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0,
-    shadowRadius: 6,
+    borderColor: C.line,
   },
   inputPillFocused: {
-    borderColor: 'rgba(0,0,0,0.14)',
+    borderColor: C.line2,
   },
   inputPillIncognito: {
     borderStyle: 'dashed',
-    borderColor: 'rgba(0,0,0,0.2)',
+    borderColor: 'rgba(26,31,54,0.2)',
   },
   input: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 16,
-    color: '#1A1A1A',
+    fontFamily: 'Fraunces-Text',
+    fontSize: 15,
+    color: C.ink,
     lineHeight: 22,
     minHeight: 22,
     maxHeight: 110,
     paddingTop: 0,
     paddingBottom: 0,
     textAlignVertical: 'top',
+    letterSpacing: 0.1,
   },
   inputButtonRow: {
     flexDirection: 'row',
@@ -1252,7 +2175,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: C.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1260,7 +2183,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#050505',
+    backgroundColor: C.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1274,13 +2197,13 @@ const styles = StyleSheet.create({
     width: 2.5,
     height: 4,
     borderRadius: 1.25,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.cream,
     opacity: 0.92,
   },
   voiceBar: {
     width: 2.5,
     borderRadius: 1.25,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.cream,
   },
   voiceBarShort: {
     height: 5,
@@ -1296,54 +2219,58 @@ const styles = StyleSheet.create({
   crisisOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(26,31,54,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
     padding: 20,
   },
   crisisCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 28,
+    backgroundColor: C.paper,
+    borderRadius: RADIUS.card,
+    padding: 24,
     width: '100%',
     maxWidth: 360,
     alignItems: 'center',
     ...CARD_SHADOW,
   },
   crisisTitle: {
-    fontFamily: 'Outfit-SemiBold',
+    fontFamily: 'Fraunces-Medium',
     fontSize: 22,
-    color: '#1A1A1A',
-    marginBottom: 14,
+    color: C.ink,
+    marginBottom: 12,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   crisisText: {
-    fontFamily: 'Outfit-Regular',
-    fontSize: 16,
-    color: 'rgba(0,0,0,0.55)',
+    fontFamily: 'Fraunces-Text',
+    fontSize: 14,
+    color: C.ink2,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 22,
+    letterSpacing: 0.1,
   },
   crisisBtn: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: C.ink,
     paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 30,
-    marginBottom: 12,
+    paddingHorizontal: 24,
+    borderRadius: RADIUS.btn,
+    marginBottom: 10,
     width: '100%',
     alignItems: 'center',
   },
   crisisBtnText: {
-    fontFamily: 'Outfit-SemiBold',
-    color: '#FFFFFF',
-    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: C.cream,
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
   crisisDismiss: { paddingVertical: 12 },
   crisisDismissText: {
-    fontFamily: 'Outfit-Regular',
-    color: 'rgba(0,0,0,0.4)',
-    fontSize: 14,
+    fontFamily: 'JetBrainsMono-Medium',
+    color: C.ink3,
+    fontSize: 11,
+    letterSpacing: 1.4,
   },
 });

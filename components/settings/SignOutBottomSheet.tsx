@@ -1,29 +1,46 @@
 /**
- * Sign Out Bottom Sheet Component
- * Confirmation dialog for signing out
+ * SignOutBottomSheet — sign-out confirmation in the SelfMind bottom-
+ * sheet pattern.
+ *
+ * Visual chrome matches the rest of the app's profile sheets
+ * (RadioSheet / EditNameSheet / CheckInTimesSheet): floating, inset
+ * 12 px from screen edges, fully-rounded 28 px corners, drop-shadow,
+ * paper canvas, ink/JetBrainsMono kicker + Fraunces title + lede +
+ * paired action buttons.
+ *
+ * Animation uses `withTiming` + `Easing.out(Easing.cubic)` only —
+ * spring/bounce physics are explicitly forbidden by `CLAUDE.md` for
+ * this codebase.
+ *
+ * Buttons:
+ *   • Cancel — ghost (paper, ink2 label, line2 border).
+ *   • Sign out — coral surface, ink label. Coral chosen as the
+ *     destructive accent since the broader app already uses coral for
+ *     "danger" (see `SelfMindProfile.styles.rowLabelDanger`); ink
+ *     reads warmly on coral and avoids stark white-on-red harshness.
+ *   • Loading state collapses the button label into an ActivityIndicator
+ *     to match the in-screen "Signing out…" affordance the screen had
+ *     before the sheet was wired up.
  */
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+  ActivityIndicator,
   Modal,
-  Dimensions,
   Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SHEET_HEIGHT = 220;
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { BRAND as C, RADIUS } from '@/components/common/BrandGlyphs';
 
 interface SignOutBottomSheetProps {
   visible: boolean;
@@ -32,6 +49,8 @@ interface SignOutBottomSheetProps {
   loading?: boolean;
 }
 
+const ANIM_MS = 220;
+
 export default function SignOutBottomSheet({
   visible,
   onClose,
@@ -39,110 +58,126 @@ export default function SignOutBottomSheet({
   loading = false,
 }: SignOutBottomSheetProps) {
   const insets = useSafeAreaInsets();
-  const [isVisible, setIsVisible] = React.useState(false);
+  const [isMounted, setIsMounted] = React.useState(false);
 
-  const translateY = useSharedValue(SCREEN_HEIGHT);
-  const backdropOpacity = useSharedValue(0);
-  const scale = useSharedValue(0.96);
+  const progress = useSharedValue(0);
 
-  const hideModal = useCallback(() => {
-    setIsVisible(false);
+  /* In-flight guard. The parent's `signingOut` flag also guards via
+   * the `loading` prop, but a state propagation lag opens a one-render
+   * window where rapid double-tap of "Sign out" can fire `onSignOut`
+   * twice before the parent re-renders with `loading=true`. */
+  const submittingRef = useRef(false);
+  useEffect(() => {
+    if (visible) submittingRef.current = false;
+  }, [visible]);
+
+  const handleSignOut = useCallback(() => {
+    if (loading || submittingRef.current) return;
+    submittingRef.current = true;
+    onSignOut();
+  }, [loading, onSignOut]);
+
+  const finalizeUnmount = useCallback(() => {
+    setIsMounted(false);
     onClose();
   }, [onClose]);
 
   useEffect(() => {
     if (visible) {
-      setIsVisible(true);
-      backdropOpacity.value = withTiming(1, { duration: 350 });
-      translateY.value = withSpring(0, {
-        damping: 50,
-        stiffness: 150,
-        mass: 0.5,
+      setIsMounted(true);
+      progress.value = withTiming(1, {
+        duration: ANIM_MS,
+        easing: Easing.out(Easing.cubic),
       });
-      scale.value = withSpring(1, {
-        damping: 50,
-        stiffness: 150,
-        mass: 0.8,
-      });
-    } else if (isVisible) {
-      backdropOpacity.value = withTiming(0, { duration: 300 });
-      scale.value = withTiming(0.96, { duration: 300 });
-      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
-        if (finished) {
-          runOnJS(hideModal)();
-        }
-      });
+    } else if (isMounted) {
+      progress.value = withTiming(
+        0,
+        { duration: ANIM_MS, easing: Easing.out(Easing.cubic) },
+        (finished) => {
+          if (finished) runOnJS(finalizeUnmount)();
+        },
+      );
     }
-  }, [visible]);
+  }, [visible, isMounted, progress, finalizeUnmount]);
 
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: backdropOpacity.value,
+    opacity: progress.value * 0.5,
   }));
 
   const sheetStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+    transform: [{ translateY: (1 - progress.value) * 60 }],
+    opacity: progress.value,
   }));
 
   const handleClose = () => {
-    backdropOpacity.value = withTiming(0, { duration: 300 });
-    scale.value = withTiming(0.96, { duration: 300 });
-    translateY.value = withTiming(SCREEN_HEIGHT, { duration: 350 }, (finished) => {
-      if (finished) {
-        runOnJS(hideModal)();
-      }
-    });
+    if (loading) return;
+    progress.value = withTiming(
+      0,
+      { duration: ANIM_MS, easing: Easing.out(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(finalizeUnmount)();
+      },
+    );
   };
 
-  const handleSignOut = () => {
-    onSignOut();
-  };
-
-  if (!isVisible) return null;
+  if (!isMounted) return null;
 
   return (
-    <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      <View style={styles.container}>
-        {/* Backdrop */}
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+    <Modal
+      transparent
+      visible={isMounted}
+      animationType="none"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+    >
+      <View style={styles.root}>
+        <Animated.View style={[StyleSheet.absoluteFillObject, styles.backdrop, backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} />
         </Animated.View>
 
-        {/* Floating Sheet */}
-        <Animated.View style={[styles.sheet, sheetStyle, { bottom: 16 }]}>
-          {/* Handle Bar */}
-          <View style={styles.handleBar} />
+        <Animated.View
+          style={[
+            styles.sheet,
+            { bottom: Math.max(insets.bottom, 16) },
+            sheetStyle,
+          ]}
+        >
+          <View style={styles.handle} />
 
-          {/* Content */}
-          <View style={[styles.content, { paddingBottom: insets.bottom > 0 ? insets.bottom : 24 }]}>
-            {/* Title */}
-            <Text style={styles.title}>Sign out?</Text>
-            <Text style={styles.subtitle}>Are you sure you want to sign out?</Text>
+          <Text style={styles.kicker}>— sign out</Text>
+          <Text style={styles.title}>Step away for now?</Text>
+          <Text style={styles.lede}>
+            You can come back any time — your account is waiting.
+          </Text>
 
-            {/* Buttons */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={handleClose}
-                activeOpacity={0.8}
-                disabled={loading}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+          <View style={styles.actions}>
+            <Pressable
+              onPress={handleClose}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.btnGhost,
+                pressed && !loading && styles.btnPressed,
+                loading && styles.btnDisabled,
+              ]}
+            >
+              <Text style={styles.btnGhostLabel}>Cancel</Text>
+            </Pressable>
 
-              <TouchableOpacity
-                style={[styles.signOutButton, loading && styles.buttonDisabled]}
-                onPress={handleSignOut}
-                activeOpacity={0.8}
-                disabled={loading}
-              >
-                <Text style={styles.signOutButtonText}>
-                  {loading ? 'Signing out...' : 'Sign Out'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <Pressable
+              onPress={handleSignOut}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.btnDestructive,
+                pressed && !loading && styles.btnPressed,
+                loading && styles.btnDisabled,
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={C.ink} />
+              ) : (
+                <Text style={styles.btnDestructiveLabel}>Sign out</Text>
+              )}
+            </Pressable>
           </View>
         </Animated.View>
       </View>
@@ -151,87 +186,94 @@ export default function SignOutBottomSheet({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    zIndex: 998,
-  },
+  root: { flex: 1 },
+  backdrop: { backgroundColor: C.ink },
+
+  /* Floating sheet — matches the chrome of every other profile sheet
+   * (inset 12 from edges, full rounded corners, shadow-lifted). */
   sheet: {
     position: 'absolute',
     left: 12,
     right: 12,
-    minHeight: SHEET_HEIGHT,
-    zIndex: 999,
+    backgroundColor: C.paper,
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 18,
     overflow: 'hidden',
-    borderRadius: 40,
-    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.18,
     shadowRadius: 24,
-    elevation: 24,
+    elevation: 18,
   },
-  handleBar: {
+  handle: {
+    alignSelf: 'center',
     width: 40,
     height: 4,
-    backgroundColor: '#E0E0E0',
     borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 16,
+    backgroundColor: C.line2,
+    marginBottom: 14,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+  kicker: {
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
+    letterSpacing: 2.2,
+    color: C.ink3,
+    textTransform: 'uppercase',
   },
   title: {
+    marginTop: 6,
+    fontFamily: 'Fraunces-Medium',
     fontSize: 22,
-    fontFamily: 'Outfit-SemiBold',
-    color: '#1A1A1A',
-    textAlign: 'center',
-    marginBottom: 6,
+    lineHeight: 30,
+    letterSpacing: -0.2,
+    color: C.ink,
   },
-  subtitle: {
-    fontSize: 15,
-    fontFamily: 'Outfit-Regular',
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
+  lede: {
+    marginTop: 8,
+    fontFamily: 'Fraunces-Text',
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: C.ink2,
+    maxWidth: 320,
   },
-  buttonContainer: {
+
+  actions: {
+    marginTop: 22,
     flexDirection: 'row',
-    gap: 12,
-    width: '100%',
+    gap: 10,
   },
-  cancelButton: {
+  btnGhost: {
     flex: 1,
-    backgroundColor: '#F0F0F0',
-    paddingVertical: 16,
-    borderRadius: 30,
+    paddingVertical: 14,
+    borderRadius: RADIUS.btn,
+    borderWidth: 1,
+    borderColor: C.line2,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.paper,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Outfit-SemiBold',
-    color: '#1A1A1A',
+  btnGhostLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: C.ink2,
+    letterSpacing: 0.1,
   },
-  signOutButton: {
+  btnDestructive: {
     flex: 1,
-    backgroundColor: '#E53E3E',
-    paddingVertical: 16,
-    borderRadius: 30,
+    paddingVertical: 14,
+    borderRadius: RADIUS.btn,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.coral,
   },
-  signOutButtonText: {
-    fontSize: 16,
-    fontFamily: 'Outfit-SemiBold',
-    color: '#FFFFFF',
+  btnDestructiveLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: C.ink,
+    letterSpacing: 0.1,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+  btnPressed: { opacity: 0.85 },
+  btnDisabled: { opacity: 0.6 },
 });

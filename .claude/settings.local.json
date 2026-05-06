@@ -4,7 +4,42 @@
       "WebFetch(domain:me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws)",
       "Bash(curl *)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('user_id:', d.get\\('user_id'\\)\\); print\\('access_token:', d.get\\('access_token',''\\)[:40]+'...' if d.get\\('access_token'\\) else 'NONE'\\)\")",
-      "Bash(npx expo *)"
+      "Bash(npx expo *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(mkdir -p /Users/warmachine37/Dev/mello-android/modules/audio/android/src/main/java/com/selfmind/audio)",
+      "Bash(git -C /Users/warmachine37/Dev/mello-android mv modules/audio/android/src/main/java/expo/modules/audio/AudioModule.kt modules/audio/android/src/main/java/com/selfmind/audio/MelloAudioModule.kt)",
+      "Bash(rmdir modules/audio/android/src/main/java/expo/modules/audio modules/audio/android/src/main/java/expo/modules modules/audio/android/src/main/java/expo)",
+      "Bash(npm run *)"
+    ],
+    "additionalDirectories": [
+      "/Users/warmachine37/Desktop/mello prototyping"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -n --rawfile msg \"$CLAUDE_PROJECT_DIR/.claude/welcome.md\" '{systemMessage: $msg, hookSpecificOutput: {hookEventName: \"SessionStart\", additionalContext: $msg}}' 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v terminal-notifier >/dev/null 2>&1 && terminal-notifier -title 'Claude Code — Mello' -message 'Task finished' -sound Glass || osascript -e 'display notification \"Task finished\" with title \"Claude Code — Mello\" sound name \"Glass\"'"
+          }
+        ]
+      }
     ]
   }
 }

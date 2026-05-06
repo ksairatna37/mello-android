@@ -11,11 +11,13 @@ Mello uses **three** API backends. Know which one to call:
 
 | Backend | Base URL | Used For |
 |---------|----------|----------|
-| **Azure Backend** | `https://new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io` | Onboarding, Get Rolling, Chat, Mood, Journal |
+| **AWS Backend** | `https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws` | Onboarding, Get Rolling, Chat, Mood, Journal |
 | **Supabase Direct** | `https://drepvbrhkxzwtwqncnyd.supabase.co` | Auth, Profiles, Settings, Delete Account |
 | **External Services** | `wss://api.hume.ai`, LiveKit | Voice/Text Chat (WebSocket) |
 
-> **See also**: [`docs/BACKEND_API.md`](./BACKEND_API.md) — Detailed Azure backend endpoint docs (request/response schemas, field mapping, gap analysis)
+> **See also**: [`docs/BACKEND_API.md`](./BACKEND_API.md) — Detailed backend endpoint docs (request/response schemas, field mapping, gap analysis)
+>
+> **Migration note (2026-04-28):** the application backend moved from Azure (`new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io`) to AWS ECS in `ap-south-2` (Hyderabad). Endpoint paths are unchanged — only the host moved.
 
 ---
 

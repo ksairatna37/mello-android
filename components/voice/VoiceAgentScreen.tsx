@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -17,8 +17,20 @@ import {
   FlatList,
   Dimensions,
   Image,
+  TouchableOpacity,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+  cancelAnimation,
+  Easing,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FadingScrollWrapper from '@/components/get-rolling/ScrollFadeEdges';
@@ -30,6 +42,8 @@ import MelloGradient from '@/components/common/MelloGradient';
 import CrisisInlineWarning from './CrisisInlineWarning';
 import TypingIndicator from '@/components/get-rolling/TypingIndicator';
 import { LIGHT_THEME } from '@/components/common/LightGradient';
+import { Glyphs, BRAND as C, RADIUS } from '@/components/common/BrandGlyphs';
+import SelfMindOrb from '@/components/common/SelfMindOrb';
 import { detectCrisis, callCrisisLine } from '@/utils/crisisDetection';
 import { fullscreenStore } from '@/utils/fullscreenStore';
 import { sidebarStore } from '@/utils/sidebarStore';
@@ -212,11 +226,151 @@ const CallTimer = React.memo(({
 const chatKeyExtractor = (item: ChatMessage) => item.id;
 
 // ═══════════════════════════════════════════════════
+// SelfMind ACTIVE SESSION HELPERS
+// ═══════════════════════════════════════════════════
+
+/**
+ * SessionTimer — owns its own duration so the parent doesn't re-render
+ * every second. Renders "SESSION · MM:SS" inline.
+ */
+const SessionTimer = React.memo(({ isActive }: { isActive: boolean }) => {
+  const [duration, setDuration] = useState(0);
+  useEffect(() => {
+    if (!isActive) { setDuration(0); return; }
+    const interval = setInterval(() => setDuration((d) => d + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+  return (
+    <Text style={inkStyles.sessionLabel}>
+      SESSION · {formatDuration(duration)}
+    </Text>
+  );
+});
+
+/**
+ * PulseRing — concentric ring around the orb that breathes opacity +
+ * scale. Three rings staggered by `index` produce the layered pulse
+ * shown in MBVoiceActive. Only animates while `active` is true.
+ */
+const PulseRing = React.memo(({
+  index,
+  baseSize,
+  active,
+}: {
+  index: number;
+  baseSize: number;
+  active: boolean;
+}) => {
+  const opacity = useSharedValue(0.3);
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (!active) {
+      cancelAnimation(opacity);
+      cancelAnimation(scale);
+      opacity.value = 0;
+      scale.value = 1;
+      return;
+    }
+    opacity.value = withDelay(
+      index * 300,
+      withRepeat(
+        withSequence(
+          withTiming(0.6, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0.3, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    scale.value = withDelay(
+      index * 300,
+      withRepeat(
+        withSequence(
+          withTiming(1.25, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    return () => {
+      cancelAnimation(opacity);
+      cancelAnimation(scale);
+    };
+  }, [active, index, opacity, scale]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  const size = baseSize - index * 40;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        inkStyles.pulseRing,
+        { width: size, height: size, borderRadius: size / 2 },
+        ringStyle,
+      ]}
+    />
+  );
+});
+
+/** Single waveform bar — pulses opacity in a phase-shifted loop. */
+const WaveformBar = React.memo(({ index, height, active }: {
+  index: number;
+  height: number;
+  active: boolean;
+}) => {
+  const opacity = useSharedValue(0.4);
+  useEffect(() => {
+    if (!active) {
+      cancelAnimation(opacity);
+      opacity.value = 0.4;
+      return;
+    }
+    const dur = 800 + (index % 3) * 200;
+    opacity.value = withDelay(
+      index * 50,
+      withRepeat(
+        withSequence(
+          withTiming(0.4, { duration: dur, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1, { duration: dur, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    return () => cancelAnimation(opacity);
+  }, [active, index, opacity]);
+  const barStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={[inkStyles.waveBar, { height }, barStyle]} />
+  );
+});
+
+/** Glassy waveform pill that floats at the bottom of the orb. Only
+ *  visible while the user (or assistant) is speaking. */
+function WaveformPill({ active }: { active: boolean }) {
+  const heights = [14, 8, 22, 12, 18, 10, 20, 14, 10, 16];
+  return (
+    <View style={inkStyles.wavePill} pointerEvents="none">
+      {heights.map((h, i) => (
+        <WaveformBar key={i} index={i} height={h} active={active} />
+      ))}
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════
 
 export default function VoiceAgentScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
   // Call state
@@ -715,6 +869,15 @@ export default function VoiceAgentScreen() {
   const handleEndCall = useCallback(async () => {
     console.log('[Mello] === Ending call ===');
 
+    // Snapshot session id + transcript length BEFORE any cleanup so we
+    // can decide whether to navigate to the post-call summary screen.
+    // navigateToSummary is only true if a real conversation happened —
+    // empty transcripts (cancelled/aborted calls) skip the summary and
+    // return to /call (pre-session).
+    const summarySessionId = voiceSessionIdRef.current;
+    const navigateToSummary = !!summarySessionId && voiceTranscriptRef.current.length > 0;
+    console.log('[Mello] handleEndCall snapshot — sessionId=' + (summarySessionId ?? 'none'), 'navigateToSummary=' + navigateToSummary);
+
     // Finalize voice session (non-blocking — fire and forget)
     if (
       voiceSessionIdRef.current &&
@@ -806,8 +969,18 @@ export default function VoiceAgentScreen() {
       assistantSpeakingRef.current = false;
       setCurrentIntervention(null);
       titleGeneratedRef.current = false;
+
+      // Hand off to the post-call summary screen if a real conversation
+      // happened. router.replace pops /voice-active off the stack so
+      // back from /voice-summary lands on /call (pre-session) — exactly
+      // the flow the user expects after a session ends.
+      if (navigateToSummary && summarySessionId) {
+        console.log('[Mello] navigating to /voice-summary?id=' + summarySessionId);
+        router.replace(`/voice-summary?id=${summarySessionId}` as any);
+      }
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
 
   const handleHindiBack = useCallback(() => {
@@ -835,6 +1008,23 @@ export default function VoiceAgentScreen() {
   const handleToggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
   }, []);
+
+  /* ─── Auto-start (SelfMind redesign) ─────────────────────────────
+   *
+   * /voice-active is reached only via SelfMindVoicePre's "Start voice"
+   * tap, so the user has already opted in. Auto-fire handleStartCall
+   * on mount so the screen lands directly in the connecting → active
+   * sequence — no second "Start" button required. Single-fire ref
+   * prevents double-start under React 18 strict-mode double-mount. */
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (callState !== 'idle') return;
+    if (showHindiScreen) return;
+    autoStartedRef.current = true;
+    console.log('[Mello] [render] auto-starting voice session on mount');
+    void handleStartCall();
+  }, [callState, showHindiScreen, handleStartCall]);
 
   // Sync local fullscreen state to the external store via useEffect.
   // This avoids "Cannot update component X while rendering Y" errors
@@ -971,131 +1161,158 @@ export default function VoiceAgentScreen() {
     </View>
   );
 
-  // Show Hindi voice screen when selected
+  // Hindi voice path is preserved (handlers + state) but unreachable
+  // from the SelfMind redesign UI — language defaults to English.
   if (showHindiScreen) {
     return <HindiVoiceScreen onBack={handleHindiBack} />;
   }
 
+  // ── SelfMind redesign — Active Session view (MBVoiceActive port)
+  // Inks the canvas, replaces the chat-list view with a single-quote
+  // moment + breathing orb + waveform. All hooks above (Hume EVI,
+  // NativeAudio, AEC, transcript, crisis, intervention) are preserved
+  // verbatim — only the JSX render is replaced.
+
+  // Resolve the last user quote for the centered headline. Falls back
+  // to a soft prompt while we wait for the first user turn.
+  const lastUserQuote: string | null = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'user') return messages[i].text;
+    }
+    return null;
+  })();
+
+  // LIVE pill should only appear once we're truly in 'active' state.
+  // Connecting / idle show a softer transitional kicker instead.
+  const headerKicker =
+    callState === 'active'   ? null :
+    callState === 'connecting' ? 'CONNECTING…' :
+    'JUST A MOMENT…';
+
+  console.log(
+    '[Mello] [render] callState=' + callState,
+    'isUserSpeaking=' + isUserSpeaking,
+    'isAssistantSpeaking=' + isAssistantSpeaking,
+    'isMuted=' + isMuted,
+    'msgs=' + messages.length,
+  );
+
+  const pulseActive = callState === 'active';
+  const waveActive = callState === 'active' && (isUserSpeaking || isAssistantSpeaking);
+
   return (
-    <View style={styles.container}>
-      {/* Animated gradient background */}
-      <MelloGradient speaker={gradientSpeaker} />
+    <View style={inkStyles.container}>
+      {/* Top bar — empty left, LIVE pill on right */}
+      <View style={[inkStyles.topBar, { paddingTop: insets.top + 12 }]}>
+        <View style={inkStyles.topSide} />
+        <View style={inkStyles.topSide} />
+        {callState === 'active' ? (
+          <View style={inkStyles.livePill}>
+            <View style={inkStyles.liveDot} />
+            <Text style={inkStyles.liveText}>LIVE</Text>
+          </View>
+        ) : (
+          <View style={inkStyles.topSide} />
+        )}
+      </View>
 
-      {/* Header — hamburger + mello logo + info button */}
-      <View style={[styles.voiceHeader, { paddingTop: insets.top + 12 }]}>
-        <Pressable style={styles.voiceHeaderBtn} hitSlop={8} onPress={sidebarStore.open}>
-          <Ionicons name="menu" size={24} color="#1A1A1A" />
-        </Pressable>
-        <View style={styles.voiceHeaderCenter}>
-          <Text style={styles.voiceLogoText}>mello</Text>
-          <Text style={styles.voiceHeaderSubtitle}>Voice Chat</Text>
+      {/* Body — header (timer + last quote) + center orb + footer controls */}
+      <View style={inkStyles.body}>
+        {/* Header text */}
+        <View style={inkStyles.headerWrap}>
+          {headerKicker ? (
+            <Text style={inkStyles.sessionLabel}>{headerKicker}</Text>
+          ) : (
+            <SessionTimer isActive={callState === 'active'} />
+          )}
+          <Text style={inkStyles.lastQuote} numberOfLines={3}>
+            {lastUserQuote
+              ? `“${lastUserQuote}”`
+              : callState === 'active'
+                ? 'I’m listening — start whenever you’re ready.'
+                : ''}
+          </Text>
         </View>
-        <Pressable style={styles.voiceHeaderBtn} hitSlop={8} onPress={() => setShowInfoSheet(true)}>
-          <Ionicons name="information-circle-outline" size={22} color="#1A1A1A" />
-        </Pressable>
-      </View>
 
-      {/* Timer — self-contained, ticks don't re-render chat */}
-      {callState === 'active' && (
-        <CallTimer
-          isActive={callState === 'active'}
-          isUserSpeaking={isUserSpeaking}
-          isAssistantSpeaking={isAssistantSpeaking}
-        />
-      )}
-
-      {/* Intervention indicator — shows active guidance type */}
-      {callState === 'active' && (
-        <InterventionIndicator
-          intervention={currentIntervention}
-          isActive={callState === 'active'}
-        />
-      )}
-
-      {/* Content */}
-      <View style={styles.contentSection}>
-        {callState === 'idle' && renderIdleScreen()}
-        {callState !== 'idle' && showTranscript && (
-          <FadingScrollWrapper topFadeHeight={40} bottomFadeHeight={45}>
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderChatItem}
-              keyExtractor={chatKeyExtractor}
-              contentContainerStyle={styles.chatScrollContent}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={listFooter}
-              removeClippedSubviews={false}
+        {/* Crisis warning + intervention indicator preserved (above orb) */}
+        {showCrisisWarning && (
+          <View style={inkStyles.crisisWrap}>
+            <CrisisInlineWarning
+              onConnect={handleCrisisConnect}
+              onDismiss={() => setShowCrisisWarning(false)}
+              autoExpand={
+                currentIntervention !== null &&
+                isHighPriorityIntervention(currentIntervention.type)
+              }
             />
-          </FadingScrollWrapper>
+          </View>
         )}
-        {callState !== 'idle' && !showTranscript && renderAvatarPlaceholder()}
-      </View>
-
-      {/* Controls */}
-      <View style={[styles.controlsBar, { paddingBottom: 24 }]}>
-        {callState === 'idle' && (
-          <Pressable
-            style={[
-              styles.startPill,
-              selectedLanguage === 'hindi' && styles.startPillHindi,
-            ]}
-            onPress={handleStartCall}
-          >
-            <Ionicons name="mic" size={22} color="#FFFFFF" />
-            <Text style={styles.startPillText}>Start</Text>
-          </Pressable>
-        )}
-
-        {callState === 'connecting' && (
-          <Pressable style={styles.connectingPill} onPress={handleEndCall}>
-            <Ionicons name="close" size={20} color="rgba(255,255,255,0.8)" />
-            <Text style={styles.connectingPillText}>Cancel</Text>
-          </Pressable>
-        )}
-
-        {callState === 'active' && (
-          <View style={styles.controlBar}>
-            {/* Mute */}
-            <Pressable
-              style={[styles.controlIcon, isMuted && styles.controlIconActive]}
-              onPress={handleToggleMute}
-            >
-              <Ionicons
-                name={isMuted ? 'mic-off' : 'mic'}
-                size={20}
-                color="#9999a8"
-              />
-            </Pressable>
-
-            {/* Transcript toggle */}
-            <Pressable
-              style={[styles.controlIcon, showTranscript && styles.controlIconActive]}
-              onPress={handleToggleTranscript}
-            >
-              <TranscriptIcon size={25} color="#9999a8" />
-            </Pressable>
-
-            {/* Fullscreen toggle */}
-            <Pressable
-              style={[styles.controlIcon, isFullscreen && styles.controlIconActive]}
-              onPress={handleToggleFullscreen}
-            >
-              <Ionicons
-                name={isFullscreen ? 'contract-outline' : 'expand-outline'}
-                size={20}
-                color="#9999a8"
-              />
-            </Pressable>
-
-            {/* End call pill */}
-            <Pressable style={styles.endPill} onPress={handleEndCall}>
-              <Ionicons name="call" size={18} color="#FFFFFF" />
-              <Text style={styles.endPillText}>End</Text>
-            </Pressable>
+        {callState === 'active' && currentIntervention && (
+          <View style={inkStyles.interventionWrap}>
+            <InterventionIndicator
+              intervention={currentIntervention}
+              isActive={callState === 'active'}
+            />
           </View>
         )}
 
+        {/* Orb stack — 3 pulse rings + breathing orb + waveform pill */}
+        <View style={inkStyles.orbBox}>
+          {[0, 1, 2].map((i) => (
+            <PulseRing key={i} index={i} baseSize={280} active={pulseActive} />
+          ))}
+          <View style={inkStyles.orbCenter}>
+            <SelfMindOrb size={240} seed={7} />
+          </View>
+          <View style={inkStyles.wavePillWrap} pointerEvents="none">
+            <WaveformPill active={waveActive} />
+          </View>
+        </View>
+
+        {/* Bottom controls — Close, Big End, Chat (transcript) */}
+        <View style={inkStyles.controlsRow}>
+          <TouchableOpacity
+            style={inkStyles.smallControl}
+            onPress={() => {
+              console.log('[Mello] [render] close (X) tapped → handleEndCall');
+              handleEndCall();
+            }}
+            activeOpacity={0.8}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Glyphs.Close size={18} color={C.cream} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={inkStyles.endBigBtn}
+            onPress={() => {
+              console.log('[Mello] [render] big end tapped → handleEndCall');
+              handleEndCall();
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={inkStyles.endBigBtnInner} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              inkStyles.smallControl,
+              isMuted && inkStyles.smallControlActive,
+            ]}
+            onPress={() => {
+              console.log('[Mello] [render] mute tapped → handleToggleMute (was ' + isMuted + ')');
+              handleToggleMute();
+            }}
+            activeOpacity={0.8}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={isMuted ? 'mic-off' : 'mic'}
+              size={20}
+              color={isMuted ? C.coral : C.cream}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <VoiceInfoSheet visible={showInfoSheet} onClose={() => setShowInfoSheet(false)} />
@@ -1424,3 +1641,150 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
   },
 });
+
+
+/* ─── SelfMind redesign — Active Session styles ─────────────────── */
+
+const inkStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#1A1F36", // C.ink
+  },
+
+  topBar: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  topSide: { width: 60, height: 32 },
+
+  livePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  liveDot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: "#F4A988", // C.coral
+  },
+  liveText: {
+    fontFamily: "JetBrainsMono-Medium",
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: "rgba(255,255,255,0.7)",
+  },
+
+  body: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 120,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  headerWrap: {
+    paddingTop: 12,
+    alignItems: "center",
+  },
+  sessionLabel: {
+    fontFamily: "JetBrainsMono-Medium",
+    fontSize: 11,
+    letterSpacing: 2.2,
+    color: "rgba(255,255,255,0.5)",
+  },
+  lastQuote: {
+    marginTop: 12,
+    fontFamily: "Fraunces-Medium",
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+    color: "#FBF5EE", // C.cream
+    textAlign: "center",
+    maxWidth: 320,
+  },
+
+  crisisWrap: {
+    width: "100%",
+    paddingHorizontal: 4,
+  },
+  interventionWrap: {
+    width: "100%",
+    alignItems: "center",
+  },
+
+  orbBox: {
+    width: 280,
+    height: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  orbCenter: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pulseRing: {
+    position: "absolute",
+    borderWidth: 1,
+    borderColor: "rgba(244,169,136,0.22)",
+  },
+  wavePillWrap: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  wavePill: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 3,
+    height: 32,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  waveBar: {
+    width: 3,
+    backgroundColor: "#FBF5EE", // C.cream
+    borderRadius: 2,
+  },
+
+  controlsRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  smallControl: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center", justifyContent: "center",
+  },
+  smallControlActive: {
+    backgroundColor: "rgba(244,169,136,0.18)",
+  },
+  endBigBtn: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: "#F4A988", // C.coral
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#F4A988",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  endBigBtnInner: {
+    width: 22, height: 22, borderRadius: 4,
+    backgroundColor: "#1A1F36", // C.ink
+  },
+});
+

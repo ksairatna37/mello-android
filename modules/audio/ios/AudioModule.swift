@@ -1,7 +1,7 @@
 import ExpoModulesCore
 import AVFoundation
 
-public class AudioModule: Module {
+public class MelloAudioModule: Module {
   private var audioEngine: AVAudioEngine?
   private var playerNode: AVAudioPlayerNode?
   private var mixerNode: AVAudioMixerNode?

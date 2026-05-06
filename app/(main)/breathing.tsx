@@ -397,13 +397,6 @@ const MESSAGE_SETS: Record<string, MessageSet> = {
   default: { inhale: DEFAULT_INHALE, hold: DEFAULT_HOLD, exhale: DEFAULT_EXHALE },
 };
 
-// Gentle set for high intensity users (moodIntensity >= 2)
-const GENTLE_SET: MessageSet = {
-  inhale: GENTLE_INHALE,
-  hold: GENTLE_HOLD,
-  exhale: GENTLE_EXHALE,
-};
-
 // Encouraging messages for skipped state
 const SKIPPED_MESSAGES = [
   "That's okay, you showed up. Sometimes just being here is the bravest step.",
@@ -460,22 +453,6 @@ function BreathingScreen() {
         setFirstName(data.firstName);
       }
 
-      // High intensity users get gentle messages (priority)
-      if (data.moodIntensity !== undefined && data.moodIntensity >= 2) {
-        setActiveMessageSet(GENTLE_SET);
-        return;
-      }
-
-      // Otherwise, personalize by primary feeling
-      if (data.selectedFeelings && data.selectedFeelings.length > 0) {
-        const primaryFeeling = data.selectedFeelings[0];
-        if (MESSAGE_SETS[primaryFeeling]) {
-          setActiveMessageSet(MESSAGE_SETS[primaryFeeling]);
-          return;
-        }
-      }
-
-      // Default messages
       setActiveMessageSet(MESSAGE_SETS.default);
     };
 

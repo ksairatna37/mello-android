@@ -1,8 +1,8 @@
 # Mello Backend API — Complete Reference
 
-> **Base URL**: `https://new-mello-backend.thankfuldesert-772ce932.westus.azurecontainerapps.io`
-> **Live Docs**: `{BASE_URL}/docs`
-> **Last Updated**: 2026-04-07
+> **Base URL**: `https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws`
+> **Live Docs**: `{BASE_URL}/docs` → <https://me-539b4e0a005d4010ba48937cc598b48a.ecs.ap-south-2.on.aws/docs>
+> **Last Updated**: 2026-04-28 (migrated from Azure West US to AWS ECS Asia Pacific (Hyderabad))
 > **Total Endpoints**: 19
 
 ---
@@ -28,8 +28,8 @@
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │                    AZURE BACKEND                            │  │
-│  │         (new-mello-backend.thankfuldesert...)              │  │
+│  │                    AWS BACKEND (ECS, ap-south-2)            │  │
+│  │         (me-539b4e0a005d4010ba48937cc598b48a...)           │  │
 │  │                                                             │  │
 │  │  AUTH:          POST /rest/v1/auth/signup                  │  │
 │  │                 POST /rest/v1/auth/login                   │  │
@@ -614,6 +614,112 @@ Delete profile row from `public.profiles`.
 }
 ```
 
+---
+
+## Voice Endpoints
+
+> Discovered on the live `/docs` surface (main2.py) on 2026-04-16. Used by `services/chat/voiceChatService.ts` after the supabase-RPC → REST migration.
+
+### 20. POST /rest/v1/voice_sessions
+
+Start a new voice session for a user. Status defaults to `active`.
+
+**Request Body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `user_id` | uuid | Yes |
+| `hume_chat_id` | string | No |
+| `hume_chat_group_id` | string | No |
+| `started_at` | ISO timestamp | No (default `now()`) |
+| `transcript` | array | No (default `[]`) |
+| `status` | `"active"` \| `"ended"` | No (default `"active"`) |
+
+**Response (201):** Created `voice_sessions` row.
+
+### 21. GET /rest/v1/voice_sessions
+
+Fetch sessions for a user, ordered by `started_at DESC`.
+
+**Query:** `user_id` (required), `id` (optional — single session), `status` (optional).
+
+### 22. PATCH /rest/v1/voice_sessions
+
+Update a session — end it, attach transcript / summary / emotions.
+
+**Query:** `id` (required UUID). **Body:** any subset of `hume_chat_id, hume_chat_group_id, ended_at, duration_seconds, transcript, summary, top_emotions, status`.
+
+### 23. DELETE /rest/v1/voice_sessions
+
+Delete a session. **Query:** `id` (required UUID).
+
+---
+
+### 24. POST /rest/v1/voice_user_profiles
+
+Upsert a voice user profile (one row per user, keyed on `user_id`). Calling again with the same `user_id` updates.
+
+**Request Body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `user_id` | uuid | Yes |
+| `hume_chat_group_id` | varchar(255) | No |
+| `quick_context` | varchar(500) | No |
+| `last_emotions` | varchar(200) | No |
+| `detected_name` | varchar(100) | No |
+| `total_sessions` | int | No (default 0) |
+| `total_minutes` | int | No (default 0) |
+
+### 25. GET /rest/v1/voice_user_profiles
+
+Fetch the profile for a user. **Query:** `user_id`. 404 on first-call.
+
+### 26. PATCH /rest/v1/voice_user_profiles
+
+Update specific fields. **Query:** `user_id`. **Body:** any subset of `hume_chat_group_id, quick_context, last_emotions, detected_name, total_sessions, total_minutes`.
+
+### 27. DELETE /rest/v1/voice_user_profiles
+
+Delete by `user_id`.
+
+---
+
+### 28. POST /rest/v1/voice_context
+
+Add a voice context entry. Priority 1–10 (default 5).
+
+**Request Body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `user_id` | uuid | Yes |
+| `context_type` | varchar(50) | Yes |
+| `context_text` | string | Yes |
+| `priority` | int 1–10 | No (default 5) |
+| `is_active` | bool | No (default true) |
+| `expires_at` | ISO timestamp | No |
+
+### 29. GET /rest/v1/voice_context
+
+Fetch entries for a user, ordered by priority DESC. **Query:** `user_id` (required), `is_active` / `context_type` (optional).
+
+### 30. PATCH /rest/v1/voice_context
+
+Update by `id` (UUID, query param). Body: any subset of `context_type, context_text, priority, is_active, expires_at`.
+
+### 31. DELETE /rest/v1/voice_context
+
+Delete by `id` (query param).
+
+---
+
+## Auth — additional endpoint
+
+### 32. POST /rest/v1/auth/verify-reset-otp
+
+Verify the OTP from a password-reset email before the password is set. Pairs with `/auth/reset-password` and `/auth/confirm-reset`.
+
 **Status Codes:** 200, 400, 404, 500
 
 ---
@@ -713,6 +819,19 @@ Delete profile row from `public.profiles`.
 | 17 | GET | `/rest/v1/profiles` | Bearer | Get profile |
 | 18 | PATCH | `/rest/v1/profiles` | Bearer | Update profile |
 | 19 | DELETE | `/rest/v1/profiles` | Bearer | Delete profile |
+| 20 | POST | `/rest/v1/voice_sessions` | Bearer | Start voice session |
+| 21 | GET | `/rest/v1/voice_sessions` | Bearer | List voice sessions |
+| 22 | PATCH | `/rest/v1/voice_sessions` | Bearer | Update / end session |
+| 23 | DELETE | `/rest/v1/voice_sessions` | Bearer | Delete session |
+| 24 | POST | `/rest/v1/voice_user_profiles` | Bearer | Upsert voice profile |
+| 25 | GET | `/rest/v1/voice_user_profiles` | Bearer | Get voice profile |
+| 26 | PATCH | `/rest/v1/voice_user_profiles` | Bearer | Update voice profile |
+| 27 | DELETE | `/rest/v1/voice_user_profiles` | Bearer | Delete voice profile |
+| 28 | POST | `/rest/v1/voice_context` | Bearer | Add context entry |
+| 29 | GET | `/rest/v1/voice_context` | Bearer | List context entries |
+| 30 | PATCH | `/rest/v1/voice_context` | Bearer | Update context entry |
+| 31 | DELETE | `/rest/v1/voice_context` | Bearer | Delete context entry |
+| 32 | POST | `/rest/v1/auth/verify-reset-otp` | No | Verify password-reset OTP |
 
 ---
 

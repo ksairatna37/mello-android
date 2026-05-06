@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(/.claude/skills/rn-perf/**)",
+      "Edit(/.claude/skills/rn-a11y/**)",
+      "Edit(/.claude/skills/eas-build/**)",
+      "Bash(python3 -c \"import sys,json; json.load\\(sys.stdin\\); print\\('valid JSON'\\)\")",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Read(//Users/warmachine37/Desktop/**)",
+      "Bash(awk -F'\\\\t' '{printf \"%-30s %-35s %s\\\\n\", $1, $2, $3}')",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('.claude/settings.local.json'\\)\\); assert '/Users/warmachine37/Desktop/mello prototyping' in d['permissions']['additionalDirectories']; print\\('OK — additionalDirectories contains prototype path'\\)\")",
+      "WebFetch(domain:www.affirmations.dev)",
+      "WebFetch(domain:www.freepublicapis.com)",
+      "Read(//Users/warmachine37/Downloads/**)"
+    ]
+  }
+}

@@ -208,15 +208,24 @@ export async function login(
   );
 
   if (response.error) {
-    // Map backend errors to user-friendly messages
+    // Map backend errors to user-friendly messages.
     if (response.error.status === 401) {
-      // Check if user exists with Google OAuth
+      // Disambiguate between "no such account" and "wrong password" by
+      // querying profiles directly. If the email doesn't exist, signal
+      // it with `noAccount: true` so the UI can auto-promote to signup.
       const emailCheck = await checkEmailProvider(email);
       if (emailCheck.exists && emailCheck.provider === 'google') {
         return {
           success: false,
           error: 'This account uses Google Sign-In. Please sign in with Google instead.',
           existingProvider: 'google',
+        };
+      }
+      if (!emailCheck.exists) {
+        return {
+          success: false,
+          error: 'No account found for this email — creating one.',
+          noAccount: true,
         };
       }
       return { success: false, error: 'Invalid email or password' };

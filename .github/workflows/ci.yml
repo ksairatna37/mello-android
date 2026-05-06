@@ -1,0 +1,36 @@
+name: CI
+
+# Lightweight gate: typecheck + unit tests on every push/PR. Does not
+# run prebuild or build the native app — those are heavy and live in
+# EAS. The point here is to catch TS regressions and validator-logic
+# regressions in seconds, not minutes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: typecheck + jest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test -- --ci

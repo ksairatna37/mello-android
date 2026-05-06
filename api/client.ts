@@ -70,9 +70,16 @@ export async function request<T>(
 
     // Success response
     if (response.ok) {
-      const data = await response.json();
       console.log(`[api] ← ${method} ${endpoint} ${response.status} (${ms}ms)`);
-      return { data, error: null };
+      // 204 / empty body: skip JSON parse, return null payload.
+      const text = await response.text();
+      if (!text) return { data: null as unknown as T, error: null };
+      try {
+        return { data: JSON.parse(text) as T, error: null };
+      } catch (parseErr) {
+        console.warn(`[api] ← ${method} ${endpoint} non-JSON success body, len=${text.length}`);
+        return { data: null as unknown as T, error: null };
+      }
     }
 
     // Error response
@@ -143,18 +150,23 @@ export async function authGet<T>(
 }
 
 /**
- * Authenticated POST request helper (with Bearer token)
+ * Authenticated POST request helper (with Bearer token).
+ * Optional `extraHeaders` lets callers pass per-request headers like
+ * `Prefer: resolution=merge-duplicates,return=representation` for
+ * upsert-style POSTs to PostgREST.
  */
 export async function authPost<T, B = unknown>(
   endpoint: string,
   body: B,
-  accessToken: string
+  accessToken: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<ApiResponse<T>> {
   return request<T>(endpoint, {
     method: 'POST',
     body: JSON.stringify(body),
     headers: {
       'Authorization': `Bearer ${accessToken}`,
+      ...(extraHeaders ?? {}),
     },
   });
 }
@@ -173,5 +185,24 @@ export async function authPatch<T, B = unknown>(
     headers: {
       'Authorization': `Bearer ${accessToken}`,
     },
+  });
+}
+
+/**
+ * Authenticated DELETE request helper (with Bearer token).
+ * Used by voice endpoints (voice_sessions, voice_context,
+ * voice_user_profiles) which expose DELETE per /docs.
+ */
+export async function authDelete<T, B = unknown>(
+  endpoint: string,
+  accessToken: string,
+  body?: B,
+): Promise<ApiResponse<T>> {
+  return request<T>(endpoint, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }

@@ -43,7 +43,7 @@ const AudioModule = {
     eventName: K,
     listener: AudioModuleEvents[K],
   ): Subscription {
-    return emitter.addListener(eventName as string, listener as any);
+    return (emitter as any).addListener(eventName, listener);
   },
 };
 

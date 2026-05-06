@@ -9,71 +9,69 @@ import { getOnboardingData, type OnboardingData } from '@/utils/onboardingStorag
 import { getAccessToken, getSession } from '@/services/auth';
 
 // ─── Answer label maps (mirrors questions.tsx) ───────────────────────────────
+//
+// Mirrors the prose maps in services/chat/bedrockService.ts so the backend
+// receives human-readable answers for the 10-question flow. Keep these two
+// in sync — if you edit one, edit the other (they share the same source of
+// truth: the option text in app/(onboarding)/_components/types.ts).
 
-const MOOD_WEATHER_MAP: Record<string, string> = {
-  stormy: 'Stormy — everything feels like too much',
-  rainy:  'Rainy — heavy and slow',
-  foggy:  "Foggy — can't think straight",
-  cloudy: 'Cloudy — up and down',
-  okay:   'Surprisingly okay',
+const NEW_Q1_MAP: Record<string, string> = {
+  stormy: 'Stormy — everything feels like too much.',
+  rainy:  'Rainy — heavy and slow.',
+  foggy:  'Foggy — can’t think straight.',
+  cloudy: 'Cloudy — up and down today.',
+  okay:   'Surprisingly okay — don’t know why I’m here tbh.',
 };
-const SPIRIT_ANIMAL_MAP: Record<string, string> = {
-  turtle:    'The Turtle — I go quiet and process alone',
-  butterfly: 'The Butterfly — I need to talk it out',
-  wolf:      'The Wolf — I need my people around me',
-  lion:      'The Lion — just tell me what to do',
-  shell:     'The Shell — I shut down first, then slowly open up',
+const NEW_Q2_MAP: Record<string, string> = {
+  sunday:      'Sunday late afternoon — the anticipatory tax.',
+  afternoon:   'The 2–4pm slump — afternoon energy cliff.',
+  'post-work': 'Right after work — the re-entry hour.',
+  late:        'Late at night — when the quiet gets loud.',
+  morning:     'Honestly, mornings — bracing before the day.',
 };
-const LATE_NIGHT_MAP: Record<string, string> = {
-  loop:      'The Loop — same thoughts over and over',
-  ache:      "The Ache — something hurts but I can't explain what",
-  replay:    "The Replay — going over a conversation I can't undo",
-  overwhelm: 'The Overwhelm — everything at once',
-  void:      'The Void — nothing, just empty',
-  wander:    "The Wander — I'm fine, I just stumbled here",
+const NEW_Q3_MAP: Record<string, string> = {
+  turtle:    'The Turtle — I retreat and process quietly alone.',
+  butterfly: 'The Butterfly — I need to talk it out to make sense of it.',
+  wolf:      'The Wolf — I need my pack; connection heals me.',
+  lion:      'The Lion — tell me what to do, I’ll fix it.',
+  shell:     'The Shell — I shut down completely first.',
 };
-const TEXT_TO_SELF_MAP: Record<string, string> = {
-  okay:     '"Hey, you\'re going to be okay"',
-  alone:    '"Stop carrying everything alone"',
-  figured:  '"It\'s okay that you don\'t have it figured out"',
-  grown:    '"You\'ve grown more than you know"',
-  avoiding: '"The thing you\'re avoiding — it\'s time"',
+const NEW_Q4_MAP: Record<string, string> = {
+  calm:            'I stay calm and think clearly.',
+  overwhelmed:     'I feel overwhelmed quickly.',
+  distract:        'I try to distract myself.',
+  'react-recover': 'I react strongly at first but calm down later.',
 };
-const WEAKEST_DIMENSION_MAP: Record<string, string> = {
-  calm:       "My patience — I get overwhelmed and can't settle down",
-  clarity:    "My thinking — my head goes foggy and I can't think straight",
-  focus:      'My drive — I lose interest in everything I was doing',
-  confidence: 'My nerve — I start doubting every decision I make',
-  positivity: "My mood — everything feels heavier than it should",
+const NEW_Q6_MAP: Record<string, string> = {
+  listener: 'I listen and support them.',
+  empath:   'I feel their emotions deeply.',
+  advisor:  'I try to give practical advice.',
+  unsure:   'I feel unsure what to say.',
 };
-const AGE_RANGE_MAP: Record<string, string> = {
-  'under-18': '17 or younger',
-  '18-24':    '18 to 24',
-  '25-34':    '25 to 34',
-  '35-44':    '35 to 44',
-  '45-54':    '45 to 54',
-  '55+':      '55 or older',
+const NEW_Q7_MAP: Record<string, string> = {
+  talk:     'I talk to someone about it.',
+  immerse:  'I feel it very deeply.',
+  private:  'I keep it to myself.',
+  fleeting: 'It passes quickly.',
 };
-const GENDER_MAP: Record<string, string> = {
-  male:   'Male',
-  female: 'Female',
-  other:  'Other',
+const NEW_Q8_MAP: Record<string, string> = {
+  'therapy-now':  'Therapy — currently',
+  'therapy-past': 'Therapy — in the past',
+  medication:     'Medication',
+  meditation:     'Meditation / breathwork apps',
+  journaling:     'Journaling on my own',
+  'first-time':   'This is my first time trying something',
 };
-const MATURITY_MAP: Record<string, string> = {
-  responsibility:         'Taking responsibility for actions',
-  self_reflection:        'Frequently doing emotional work and self-reflecting',
-  conflict_resolution:    'Resolving conflicts instead of ignoring them',
-  accepting_reality:      'Accepting reality, not denying it',
-  learning_from_mistakes: 'Learning from past mistakes',
-  emotion_regulation:     'Regulating emotions rather than acting on them',
-  empathy:                "Empathy and care for others' wellbeing",
+const NEW_Q9_MAP: Record<string, string> = {
+  '0': '"Not yet" — I’m just looking today',
+  '1': 'Seedling — just finding my footing',
+  '2': 'Growing — making real progress',
+  '3': 'Thriving — deeply grounded',
 };
-const SUPPORT_MAP: Record<string, string> = {
-  listen:    'Just listen, no advice — I need to be heard first',
-  understand: 'Help me understand myself',
-  tools:     'Give me practical tools to cope',
-  checkin:   'Check in with me regularly',
-  unsure:    "I'm not sure yet — help me figure that out",
+const NEW_TONE_MAP: Record<string, string> = {
+  'soft-slow':    'Soft & slow',
+  'clear-direct': 'Clear & direct',
+  'bit-playful':  'A bit playful',
 };
 
 // ─── Build onboarding_user_preferences JSON ──────────────────────────────────
@@ -81,45 +79,44 @@ const SUPPORT_MAP: Record<string, string> = {
 function buildPreferences(data: OnboardingData): Record<string, string> {
   const prefs: Record<string, string> = {};
 
-  if (data.moodWeather)
-    prefs["What's the weather inside your head right now?"] =
-      MOOD_WEATHER_MAP[data.moodWeather] ?? data.moodWeather;
-
-  if (data.spiritAnimal)
-    prefs["When you're struggling, your coping style is most like..."] =
-      SPIRIT_ANIMAL_MAP[data.spiritAnimal] ?? data.spiritAnimal;
-
-  if (data.lateNightMood)
-    prefs["It's 2am. You can't sleep. What's actually going on?"] =
-      LATE_NIGHT_MAP[data.lateNightMood] ?? data.lateNightMood;
-
-  if (data.textToSelf)
-    prefs["If you could text yourself from 6 months ago, you'd say..."] =
-      TEXT_TO_SELF_MAP[data.textToSelf] ?? data.textToSelf;
-
-  if (data.emotionalBattery !== undefined)
+  if (data.qHeadWeather)
+    prefs["What’s the weather inside your head right now?"] =
+      NEW_Q1_MAP[data.qHeadWeather] ?? data.qHeadWeather;
+  if (data.qHardestTime)
+    prefs["When is it hardest?"] =
+      NEW_Q2_MAP[data.qHardestTime] ?? data.qHardestTime;
+  if (data.qCopingAnimal)
+    prefs["When you’re going through something, which is more you?"] =
+      NEW_Q3_MAP[data.qCopingAnimal] ?? data.qCopingAnimal;
+  if (data.qStressResponse)
+    prefs["When something stressful happens…"] =
+      NEW_Q4_MAP[data.qStressResponse] ?? data.qStressResponse;
+  if (data.emotionalBattery !== undefined && data.emotionalBattery !== null)
     prefs["How full is your emotional battery right now?"] =
       `${data.emotionalBattery}%`;
+  if (data.qSupportStyle)
+    prefs["When someone shares their problems with you…"] =
+      NEW_Q6_MAP[data.qSupportStyle] ?? data.qSupportStyle;
+  if (data.qSadnessResponse)
+    prefs["When you feel sad…"] =
+      NEW_Q7_MAP[data.qSadnessResponse] ?? data.qSadnessResponse;
+  if (data.qTriedThings)
+    prefs["What have you tried before?"] =
+      NEW_Q8_MAP[data.qTriedThings] ?? data.qTriedThings;
+  if (data.emotionalGrowth !== undefined && data.emotionalGrowth !== null) {
+    const k = String(data.emotionalGrowth);
+    prefs["Where are you in your emotional growth?"] = NEW_Q9_MAP[k] ?? k;
+  }
+  if (typeof data.qMakeItWork === 'string' && data.qMakeItWork.trim().length > 0)
+    prefs["What would make this actually work for you?"] = data.qMakeItWork.trim();
 
-  if (data.weakestDimension)
-    prefs["On a tough day, what goes first?"] =
-      WEAKEST_DIMENSION_MAP[data.weakestDimension] ?? data.weakestDimension;
-
-  if (data.ageRange)
-    prefs["How old are you?"] =
-      AGE_RANGE_MAP[data.ageRange] ?? data.ageRange;
-
-  if (data.gender)
-    prefs["How would you describe your gender?"] =
-      GENDER_MAP[data.gender] ?? data.gender;
-
-  if (data.emotionalMaturity)
-    prefs["What is your emotional maturity?"] =
-      MATURITY_MAP[data.emotionalMaturity] ?? data.emotionalMaturity;
-
-  if (data.supportStyle)
-    prefs["What kind of support feels right?"] =
-      SUPPORT_MAP[data.supportStyle] ?? data.supportStyle;
+  // Personalize signals
+  if (Array.isArray(data.personalizeTopics) && data.personalizeTopics.length > 0)
+    prefs["What's loud in your head these days?"] =
+      data.personalizeTopics.join(', ');
+  if (typeof data.personalizeTone === 'string' && data.personalizeTone)
+    prefs["How do you want me to sound?"] =
+      NEW_TONE_MAP[data.personalizeTone] ?? data.personalizeTone;
 
   return prefs;
 }
@@ -135,7 +132,7 @@ interface OnboardingRequest {
   selected_feelings:          null;
   mood_intensity:             null;
   terms_accepted:             boolean;
-  terms_accepted_at:          null;
+  terms_accepted_at:          string | null;
   notifications_enabled:      boolean;
   microphone_enabled:         boolean;
   age_range:                  string | null;
@@ -161,7 +158,7 @@ interface OnboardingResponse {
 
 /**
  * Sync new onboarding answers to backend.
- * Fires on Continue press in emotional-mindwave.
+ * Fires on Continue press in your-reading (or downstream of save-profile).
  * Only passes first_name, age_range, and onboarding_user_preferences.
  * All old-flow fields are explicitly null.
  */
@@ -194,11 +191,13 @@ export async function syncOnboardingToBackend(): Promise<{
       avatar_value:               null,
       selected_feelings:          null,
       mood_intensity:             null,
-      terms_accepted:             false,
-      terms_accepted_at:          null,
-      notifications_enabled:      false,
-      microphone_enabled:         false,
-      age_range:                  data.ageRange ?? null,
+      // Reaching this point implies terms accepted. Honor an explicit
+      // false from the local store if it's there, otherwise default true.
+      terms_accepted:             data.termsAccepted ?? true,
+      terms_accepted_at:          new Date().toISOString(),
+      notifications_enabled:      !!data.notificationsEnabled,
+      microphone_enabled:         !!data.microphoneEnabled,
+      age_range:                  null,
       avatar_reason:              null,
       discomfort_reasons:         null,
       style:                      null,

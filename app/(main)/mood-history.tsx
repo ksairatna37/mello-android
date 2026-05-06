@@ -1,21 +1,14 @@
 /**
- * Mood History Tab (hidden - navigated from Home)
+ * Mood History / Progress Tab — SelfMind redesign.
+ *
+ * Renders the weekly + 30-day progress overview wired to mood and
+ * emotional-profile data. Hidden from the tab bar; reached from a
+ * future "Your week" tap on Home.
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import MoodHistoryScreen from '@/components/mood/MoodHistoryScreen';
+import SelfMindProgress from '@/components/mood/SelfMindProgress';
 
 export default function MoodHistoryTab() {
-  return (
-    <View style={styles.container}>
-      <MoodHistoryScreen />
-    </View>
-  );
+  return <SelfMindProgress />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});

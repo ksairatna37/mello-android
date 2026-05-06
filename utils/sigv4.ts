@@ -52,7 +52,7 @@ function awsCanonicalUri(pathname: string): string {
     .join('/');
 }
 
-async function sha256(data: BufferSource): Promise<ArrayBuffer> {
+async function sha256(data: Uint8Array | ArrayBuffer): Promise<ArrayBuffer> {
   const bytes =
     data instanceof Uint8Array
       ? toByteView(data)

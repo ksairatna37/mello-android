@@ -16,6 +16,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 
 const DOT_SIZE = 10;
 const DOT_GAP = 8;
@@ -32,7 +33,7 @@ const Dot = ({
   color
 }: {
   index: number;
-  breathScale: Animated.SharedValue<number>;
+  breathScale: SharedValue<number>;
   color: string;
 }) => {
   const opacity = useSharedValue(index === 0 ? 1 : index === 1 ? 0.6 : 0.4);

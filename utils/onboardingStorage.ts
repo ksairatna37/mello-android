@@ -1,80 +1,61 @@
 /**
- * Onboarding Storage Utility
- * Centralized storage for all onboarding user data
+ * Onboarding storage — local AsyncStorage of the user's answers
+ * collected through the (onboarding) flow.
  *
- * Architecture: Adapter pattern for easy database migration
- * - Currently uses AsyncStorage (local)
- * - Can easily switch to Supabase/database by changing the adapter
+ * Architecture: simple adapter so we can swap storage backends later
+ * without changing the public API surface.
+ *
+ * Schema policy: this type is the *single source of truth* for what
+ * the onboarding flow may persist locally. Legacy fields from the
+ * pre-redesign "get-rolling" flow have been removed (see
+ * migrateOnboardingData below for the strip-on-boot helper).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ============================================================================
-// DATA TYPES
-// ============================================================================
+// ─── Schema ──────────────────────────────────────────────────────────
 
 export interface OnboardingData {
-  // Name input (Step 3)
+  // name-input
   firstName?: string;
   lastName?: string;
 
-  // Profile picture / Avatar (Step 4)
-  avatarType?: 'emoji' | 'icon' | 'image' | null;
-  avatarValue?: string | null;
-
-  // Feelings selection (Step 5)
-  selectedFeelings?: string[];
-
-  // Mood weight (Step 6)
-  moodIntensity?: number;
-
-  // Terms accepted (Step 7)
+  // save-profile
   termsAccepted?: boolean;
   termsAcceptedAt?: string;
-
-  // Email verification (Step 8)
   email?: string;
   emailVerified?: boolean;
 
-  // Permissions (Step 9)
+  // permissions
   notificationsEnabled?: boolean;
   microphoneEnabled?: boolean;
 
-  // Onboarding Questions (10-question revamp flow)
-  moodWeather?: string;        // Q1: weather metaphor for current mood
-  spiritAnimal?: string;       // Q2: coping style / spirit animal
-  lateNightMood?: string;      // Q3: what's going on at 2am
-  textToSelf?: string;         // Q4: what you'd text yourself 6 months ago (preset option)
-  textToSelfCustom?: string;   // Q4: custom written answer
-  emotionalBattery?: string;   // Q5: emotional battery level (0-100)
-  weakestDimension?: string;   // Q6: which emotional dimension feels hardest (calm/clarity/focus/confidence/positivity)
+  // personalize-intro
+  personalizeTopics?: string[];
+  personalizeTone?: string;
 
-  // Get Rolling flow data
-  ageRange?: string;           // Age selection (under-18, 18-24, 25-34, etc.)
-  gender?: string;             // Q8: gender identity
-  emotionalGrowth?: string;      // Q9: emotional growth level (1=Seedling, 2=Growing, 3=Thriving)
-  supportStyle?: string;       // Q10: what kind of support they want
-  avatarReason?: string;       // Why they picked their avatar
-  discomfortReasons?: string[]; // What's weighing on them (multi-select)
-  style?: string;              // Communication style preference
-  challenge?: string;          // Current challenge
-  presence?: string;           // Presence preference
-  insight?: string;            // Insight preference
+  // 10-question flow
+  qHeadWeather?: string;     // Q1 — weather inside your head
+  qHardestTime?: string;     // Q2
+  qCopingAnimal?: string;    // Q3 — turtle / butterfly / wolf / lion / shell
+  qStressResponse?: string;  // Q4 — when something stressful happens
+  emotionalBattery?: string; // Q5 (0–100 as string)
+  qSupportStyle?: string;    // Q6 — when someone shares with you
+  qSadnessResponse?: string; // Q7 — when you feel sad
+  qTriedThings?: string;     // Q8
+  emotionalGrowth?: string;  // Q9 (0–3)
+  qMakeItWork?: string;      // Q10 (freeform)
 
-  // Completion tracking
-  completedSteps?: string[];
-  currentStep?: string;  // Track current onboarding screen for resume
+  // completion
   onboardingCompleted?: boolean;
   onboardingCompletedAt?: string;
 
-  // Timestamps
+  // timestamps
   createdAt?: string;
   updatedAt?: string;
 }
 
-// ============================================================================
-// STORAGE ADAPTER INTERFACE
-// ============================================================================
+// ─── Adapter ─────────────────────────────────────────────────────────
 
 interface StorageAdapter {
   get(): Promise<OnboardingData>;
@@ -83,12 +64,7 @@ interface StorageAdapter {
   clear(): Promise<void>;
 }
 
-// ============================================================================
-// ASYNC STORAGE ADAPTER (Current - Local Storage)
-// ============================================================================
-
 const STORAGE_KEY = 'onboardingData';
-const AVATAR_LEGACY_KEY = 'userAvatar'; // For backward compatibility
 
 class AsyncStorageAdapter implements StorageAdapter {
   async get(): Promise<OnboardingData> {
@@ -133,119 +109,28 @@ class AsyncStorageAdapter implements StorageAdapter {
   async clear(): Promise<void> {
     try {
       await AsyncStorage.removeItem(STORAGE_KEY);
-      await AsyncStorage.removeItem(AVATAR_LEGACY_KEY);
     } catch (e) {
       console.error('[OnboardingStorage] Clear failed:', e);
     }
   }
 }
 
-// ============================================================================
-// SUPABASE ADAPTER (Future - Database Storage)
-// Uncomment and implement when ready to use database
-// ============================================================================
-
-// import { supabase } from '@/lib/supabase';
-//
-// class SupabaseAdapter implements StorageAdapter {
-//   private userId: string;
-//
-//   constructor(userId: string) {
-//     this.userId = userId;
-//   }
-//
-//   async get(): Promise<OnboardingData> {
-//     const { data, error } = await supabase
-//       .from('user_onboarding')
-//       .select('*')
-//       .eq('user_id', this.userId)
-//       .single();
-//
-//     if (error) {
-//       console.error('[OnboardingStorage] Supabase get failed:', error);
-//       return {};
-//     }
-//     return data || {};
-//   }
-//
-//   async set(data: OnboardingData): Promise<void> {
-//     const { error } = await supabase
-//       .from('user_onboarding')
-//       .upsert({
-//         user_id: this.userId,
-//         ...data,
-//         updated_at: new Date().toISOString(),
-//       });
-//
-//     if (error) {
-//       console.error('[OnboardingStorage] Supabase set failed:', error);
-//     }
-//   }
-//
-//   async update(updates: Partial<OnboardingData>): Promise<void> {
-//     const { error } = await supabase
-//       .from('user_onboarding')
-//       .update({
-//         ...updates,
-//         updated_at: new Date().toISOString(),
-//       })
-//       .eq('user_id', this.userId);
-//
-//     if (error) {
-//       console.error('[OnboardingStorage] Supabase update failed:', error);
-//     }
-//   }
-//
-//   async clear(): Promise<void> {
-//     const { error } = await supabase
-//       .from('user_onboarding')
-//       .delete()
-//       .eq('user_id', this.userId);
-//
-//     if (error) {
-//       console.error('[OnboardingStorage] Supabase clear failed:', error);
-//     }
-//   }
-// }
-
-// ============================================================================
-// ACTIVE ADAPTER
-// Change this to switch storage backends
-// ============================================================================
-
 const adapter: StorageAdapter = new AsyncStorageAdapter();
 
-// To switch to Supabase in the future:
-// const adapter: StorageAdapter = new SupabaseAdapter(userId);
+// ─── Public API ──────────────────────────────────────────────────────
 
-// ============================================================================
-// PUBLIC API
-// ============================================================================
-
-/**
- * Get all onboarding data
- */
 export async function getOnboardingData(): Promise<OnboardingData> {
   return adapter.get();
 }
 
-/**
- * Set all onboarding data (replaces existing)
- */
 export async function setOnboardingData(data: OnboardingData): Promise<void> {
   return adapter.set(data);
 }
 
-/**
- * Update onboarding data (merges with existing)
- */
 export async function updateOnboardingData(updates: Partial<OnboardingData>): Promise<void> {
   return adapter.update(updates);
 }
 
-/**
- * Get specific field from onboarding data
- */
 export async function getOnboardingField<K extends keyof OnboardingData>(
   field: K
 ): Promise<OnboardingData[K] | undefined> {
@@ -253,77 +138,59 @@ export async function getOnboardingField<K extends keyof OnboardingData>(
   return data[field];
 }
 
-/**
- * Mark a step as completed
- */
-export async function markStepCompleted(stepName: string): Promise<void> {
-  const data = await getOnboardingData();
-  const completedSteps = data.completedSteps || [];
-  if (!completedSteps.includes(stepName)) {
-    completedSteps.push(stepName);
-    await updateOnboardingData({ completedSteps });
-  }
-}
-
-/**
- * Mark onboarding as fully completed
- */
-export async function completeOnboarding(): Promise<void> {
-  await updateOnboardingData({
-    onboardingCompleted: true,
-    onboardingCompletedAt: new Date().toISOString(),
-    currentStep: undefined, // Clear current step on completion
-  });
-}
-
-/**
- * Save current onboarding step (for resume on app restart)
- */
-export async function saveCurrentStep(stepName: string): Promise<void> {
-  await updateOnboardingData({ currentStep: stepName });
-}
-
-/**
- * Get current onboarding step (for resume on app restart)
- */
-export async function getCurrentStep(): Promise<string | undefined> {
-  const data = await getOnboardingData();
-  return data.currentStep;
-}
-
-/**
- * Clear all onboarding data (for testing/reset)
- */
 export async function clearOnboardingData(): Promise<void> {
   return adapter.clear();
 }
 
-/**
- * Save avatar with legacy support
- * Also saves to legacy key for existing code that reads 'userAvatar'
- */
-export async function saveAvatar(
-  type: 'emoji' | 'icon' | 'image' | null,
-  value: string | null
-): Promise<void> {
-  // Save to unified storage
-  await updateOnboardingData({ avatarType: type, avatarValue: value });
+// ─── One-time schema migration (called from app boot) ────────────────
 
-  // Also save to legacy key for backward compatibility
+/**
+ * Legacy keys that may still sit in AsyncStorage from the
+ * pre-redesign flow. Stripped on boot so old payloads can't leak
+ * stale fields back into the new flow.
+ */
+const LEGACY_KEYS = [
+  'avatarType', 'avatarValue',
+  'selectedFeelings', 'moodIntensity',
+  'moodWeather', 'spiritAnimal', 'lateNightMood',
+  'textToSelf', 'textToSelfCustom', 'weakestDimension',
+  'emotionalMaturity',
+  'ageRange', 'gender', 'supportStyle',
+  'avatarReason', 'discomfortReasons',
+  'style', 'challenge', 'presence', 'insight',
+  'completedSteps', 'currentStep',
+  // Pre-2026-05 question schema (replaced by qHeadWeather / qCopingAnimal /
+  // qStressResponse / qSupportStyle / qSadnessResponse).
+  'qBringHere', 'qBodyLocation', 'qInnerVoice', 'qVillage', 'qRest',
+] as const;
+
+const LEGACY_AVATAR_KEY = 'userAvatar';
+
+/**
+ * Strip legacy fields from any stored payload. Idempotent — safe to
+ * call on every boot. Also removes the legacy 'userAvatar' AsyncStorage
+ * entry left over from the old avatar flow.
+ */
+export async function migrateOnboardingData(): Promise<void> {
   try {
-    await AsyncStorage.setItem(AVATAR_LEGACY_KEY, JSON.stringify({ type, value }));
-  } catch (e) {
-    console.error('[OnboardingStorage] Legacy avatar save failed:', e);
-  }
-}
+    await AsyncStorage.removeItem(LEGACY_AVATAR_KEY);
 
-/**
- * Get avatar data
- */
-export async function getAvatar(): Promise<{ type: string | null; value: string | null }> {
-  const data = await getOnboardingData();
-  return {
-    type: data.avatarType || null,
-    value: data.avatarValue || null,
-  };
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    let touched = false;
+    for (const key of LEGACY_KEYS) {
+      if (key in parsed) {
+        delete parsed[key];
+        touched = true;
+      }
+    }
+    if (touched) {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      console.log('[OnboardingStorage] migrated: stripped legacy keys');
+    }
+  } catch (e) {
+    console.error('[OnboardingStorage] migrate failed:', e);
+  }
 }

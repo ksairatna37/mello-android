@@ -14,6 +14,7 @@ export const ENV = {
   livekitApiUrl: required('livekitApiUrl'),
   awsBedrockRegion: required('awsBedrockRegion'),
   awsBedrockModelArn: required('awsBedrockModelArn'),
+  awsBedrockHaikuModelId: extra['awsBedrockHaikuModelId'] as string | undefined,
 
   // Sensitive — injected via EAS secrets at build time
   humeApiKey: required('humeApiKey'),

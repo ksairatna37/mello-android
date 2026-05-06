@@ -1,25 +1,21 @@
 {
   "expo": {
-    "name": "Mello",
+    "name": "SelfMind",
     "slug": "mello",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/mello-app-icon.png",
-    "scheme": "mello",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/selfmind-app-icon-padded.png",
+    "scheme": "selfmind",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "buildNumber": "1",
       "supportsTablet": false,
       "bundleIdentifier": "health.melloai.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Mello needs microphone access for voice conversations.",
-        "NSSpeechRecognitionUsageDescription": "Mello uses speech recognition to understand you better.",
+        "NSMicrophoneUsageDescription": "SelfMind needs microphone access for voice conversations.",
+        "NSSpeechRecognitionUsageDescription": "SelfMind uses speech recognition to understand you better.",
+        "UIBackgroundModes": ["audio"],
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -37,8 +33,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1B9AAA"
+        "foregroundImage": "./assets/selfmind-adaptive-foreground.png",
+        "backgroundColor": "#FAF6EE"
       },
       "package": "health.melloai.app",
       "permissions": [
@@ -55,19 +51,47 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/with-android-light-theme",
       "expo-router",
       "expo-secure-store",
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FAF6EE",
+          "image": "./assets/selfmind-splash-v2.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "ios": {
+            "image": "./assets/selfmind-splash-v2.png",
+            "imageWidth": 160,
+            "backgroundColor": "#FAF6EE",
+            "resizeMode": "contain"
+          },
+          "android": {
+            "image": "./assets/selfmind-splash-v2.png",
+            "imageWidth": 240,
+            "backgroundColor": "#FAF6EE",
+            "resizeMode": "contain"
+          }
+        }
+      ],
+      [
         "expo-av",
         {
-          "microphonePermission": "Mello needs microphone access for voice conversations."
+          "microphonePermission": "SelfMind needs microphone access for voice conversations."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SelfMind needs microphone access for voice conversations."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Mello needs microphone access for voice conversations.",
-          "speechRecognitionPermission": "Mello uses speech recognition to understand you better."
+          "microphonePermission": "SelfMind needs microphone access for voice conversations.",
+          "speechRecognitionPermission": "SelfMind uses speech recognition to understand you better."
         }
       ],
       [

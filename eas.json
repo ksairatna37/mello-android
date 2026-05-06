@@ -11,7 +11,8 @@
         "HUME_CONFIG_ID": "3cdbbe91-bbf6-4e38-93b2-6166b113498a",
         "LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token",
         "AWS_BEDROCK_REGION": "us-east-1",
-        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0"
+        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0",
+        "AWS_BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
         "HUME_CONFIG_ID": "3cdbbe91-bbf6-4e38-93b2-6166b113498a",
         "LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token",
         "AWS_BEDROCK_REGION": "us-east-1",
-        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0"
+        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0",
+        "AWS_BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       }
     },
     "production": {
@@ -29,7 +31,8 @@
         "HUME_CONFIG_ID": "3cdbbe91-bbf6-4e38-93b2-6166b113498a",
         "LIVEKIT_API_URL": "https://mello-demo-drcjf8ahgvgphee3.southindia-01.azurewebsites.net/api/livekit-token",
         "AWS_BEDROCK_REGION": "us-east-1",
-        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0"
+        "AWS_BEDROCK_MODEL_ARN": "meta.llama3-8b-instruct-v1:0",
+        "AWS_BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       }
     }
   },

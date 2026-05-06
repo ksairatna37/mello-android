@@ -12,14 +12,14 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Color themes for each screen
 const THEMES = {
-  warmPink: ['#E8D0D8', '#C8A0B8', '#8B6B7B', '#4A3545', '#2D1F2D'],
-  deepPurple: ['#C8C0E0', '#9080B8', '#6050A0', '#3A2870', '#1A1535'],
-  coolTeal: ['#C0D8D8', '#88B0B0', '#507878', '#304848', '#182828'],
+  warmPink:     ['#E8D0D8', '#C8A0B8', '#8B6B7B', '#4A3545', '#2D1F2D'],
+  deepPurple:   ['#C8C0E0', '#9080B8', '#6050A0', '#3A2870', '#1A1535'],
+  coolTeal:     ['#C0D8D8', '#88B0B0', '#507878', '#304848', '#182828'],
   softLavender: ['#E0D0E8', '#C0A8D0', '#8868A0', '#503868', '#281838'],
-  deepIndigo: ['#C0C8E0', '#8090C0', '#5060A0', '#303870', '#181838'],
-  darkEmerald: ['#B0D0C8', '#80A898', '#507868', '#304840', '#182820'],
-  default: ['#E8D0D8', '#C8A0B8', '#8B6B7B', '#4A3545', '#2D1F2D'],
-};
+  deepIndigo:   ['#C0C8E0', '#8090C0', '#5060A0', '#303870', '#181838'],
+  darkEmerald:  ['#B0D0C8', '#80A898', '#507868', '#304840', '#182820'],
+  default:      ['#E8D0D8', '#C8A0B8', '#8B6B7B', '#4A3545', '#2D1F2D'],
+} as const;
 
 type ThemeName = keyof typeof THEMES;
 
@@ -33,7 +33,7 @@ export default function SimpleGradient({ theme = 'warmPink' }: SimpleGradientPro
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={colors}
+        colors={colors as unknown as readonly [string, string, ...string[]]}
         locations={[0, 0.25, 0.5, 0.75, 1]}
         style={StyleSheet.absoluteFill}
       />

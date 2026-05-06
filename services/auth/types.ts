@@ -25,6 +25,12 @@ export interface AuthResult {
   error?: string;
   needsOtpVerification?: boolean;
   existingProvider?: AuthProvider; // Set when email exists with different provider
+  // Set on a failed signIn when checkEmailProvider confirms the email
+  // does NOT exist in profiles. The save-profile screen uses this to
+  // auto-promote a signin attempt into signup with the same credentials,
+  // instead of showing "Invalid email or password" and forcing the
+  // user to manually toggle modes.
+  noAccount?: boolean;
 }
 
 // Email check result

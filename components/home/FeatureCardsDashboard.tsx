@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Svg, { Defs, RadialGradient, LinearGradient, Stop, Rect } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 60) / 2;
@@ -94,7 +94,7 @@ const AskAIAvatar = () => (
         <Stop offset="100%" stopColor="#CE93D8" stopOpacity="0.5" />
       </RadialGradient>
     </Defs>
-    <Svg.Circle cx="22" cy="22" r="20" fill="url(#aiAvatar)" />
+    <Circle cx="22" cy="22" r="20" fill="url(#aiAvatar)" />
   </Svg>
 );
 
@@ -196,7 +196,7 @@ export default function FeatureCardsDashboard({
                   <Stop offset="100%" stopColor="#CE93D8" stopOpacity="0.5" />
                 </RadialGradient>
               </Defs>
-              <Svg.Circle cx="20" cy="20" r="18" fill="url(#promptAvatar)" />
+              <Circle cx="20" cy="20" r="18" fill="url(#promptAvatar)" />
             </Svg>
           </View>
           <Text style={styles.askAIText}>Don't know where to start? Ask AI</Text>

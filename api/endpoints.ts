@@ -18,9 +18,15 @@ export const ENDPOINTS = {
   AUTH_SET_PASSWORD: '/rest/v1/auth/set-password',
   AUTH_DELETE_USER: '/rest/v1/auth/user',
   AUTH_LOGIN_GOOGLE: '/rest/v1/auth/login-using-google',
+  AUTH_VERIFY_RESET_OTP: '/rest/v1/auth/verify-reset-otp',
 
   // Onboarding
   USER_ONBOARDING: '/rest/v1/user_onboarding',
+
+  // Voice — full CRUD per /docs (live backend has 12 voice endpoints)
+  VOICE_SESSIONS: '/rest/v1/voice_sessions',
+  VOICE_CONTEXT: '/rest/v1/voice_context',
+  VOICE_USER_PROFILES: '/rest/v1/voice_user_profiles',
 
   // Chat
   UPLOAD_CHAT: '/rest/v1/upload/chat',
